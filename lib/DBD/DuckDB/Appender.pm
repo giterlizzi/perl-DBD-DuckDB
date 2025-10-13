@@ -3,7 +3,9 @@ package DBD::DuckDB::Appender;
 use strict;
 use warnings;
 
-use DBD::DuckDB::FFI qw(:all);
+use DBD::DuckDB::FFI  qw(:all);
+use DBD::DuckDB::Type qw(:all);
+
 
 sub new {
 
@@ -30,63 +32,69 @@ sub new {
     return bless $self, $class;
 }
 
+sub error { duckdb_appender_error(shift->{appender}) }
+
+
 sub append {
 
-    my ($self, $val, $type) = @_;
+    my ($self, $value, $type) = @_;
 
     return $self->{dbh}->set_err(1, 'appender flushed') if $self->{closed};
 
-}
-
-sub append_row {
-
-    my ($self, @args) = @_;
-
-    my %data = @args == 1 && ref($args[0]) eq 'HASH' ? %{$args[0]} : @args;
-
-    my $cols = $self->{columns} // [];
-    $self->begin_row or return;
-
-    for my $c (@$cols) {
-        if   (exists $data{$c}) { $self->append($data{$c}) or return }
-        else                    { $self->append_null       or return }
+    unless (defined $value) {
+        return duckdb_append_null($self->{appender});
     }
 
-    $self->end_row;
+    if ($type == DUCKDB_TYPE_VARCHAR) {
+        return duckdb_append_varchar($self->{appender}, $value);
+    }
+
+    if ($type == DUCKDB_TYPE_INTEGER) {
+        return duckdb_append_int32($self->{appender}, $value);
+    }
 
 }
 
 sub begin_row {
     my $self = shift;
-    my $rc   = duckdb_appender_begin_row($self->{duckdb_appender});
+    my $rc   = duckdb_appender_begin_row($self->{appender});
     return $self->{dbh}->set_err(1, 'duckdb_appender_begin_row failed') if $rc;
     return 1;
 }
 
 sub end_row {
     my $self = shift;
-    my $rc   = duckdb_appender_end_row($self->{duckdb_appender});
+    my $rc   = duckdb_appender_end_row($self->{appender});
     return $self->{dbh}->set_err(1, 'duckdb_appender_end_row failed') if $rc;
     return 1;
 }
 
 sub flush {
-
     my $self = shift;
-
-    my $rc = duckdb_appender_flush($self->{duckdb_appender});
+    my $rc   = duckdb_appender_flush($self->{appender});
     return $self->{dbh}->set_err(1, 'duckdb_appender_flush failed') if $rc;
     return 1;
 
 }
 
-sub finish {
+sub close {
     my $self = shift;
-    my $rc   = duckdb_appender_destroy($self->{duckdb_appender});
-    return $self->{dbh}->set_err(1, 'duckdb_appender_destroy failed') if $rc;
+    my $rc   = duckdb_appender_close($self->{appender});
+    return $self->{dbh}->set_err(1, 'duckdb_appender_flush failed') if $rc;
     return 1;
 }
 
-sub DESTROY { shift->finish }
+sub destroy {
+    my $self = shift;
+    my $rc   = duckdb_appender_destroy(\$self->{appender});
+    return $self->{dbh}->set_err(1, 'duckdb_appender_destroy failed') if $rc;
+    $self->{closed} = 1;
+    return 1;
+}
+
+sub DESTROY {
+    my $self = shift;
+    $self->destroy unless $self->{closed};
+}
 
 1;

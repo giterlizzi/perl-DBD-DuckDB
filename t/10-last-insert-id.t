@@ -24,10 +24,11 @@ ok $dbh->do(q{INSERT INTO tbl (s) VALUES ('hello'), ('world')}) == 2, 'Insert da
 
 SCOPE: {
 
-    my $sth = $dbh->prepare('SELECT * FROM tbl');
-    $sth->execute;
+    my $rows = $dbh->selectall_hashref('SELECT * FROM tbl', 's');
 
-    is_deeply $sth->fetchall_arrayref, [[1, 'hello'], [2, 'world']], 'Fetch all rows';
+    is $rows->{hello}->{id}, 1;
+    is $rows->{world}->{id}, 2;
+
 }
 
 SCOPE: {

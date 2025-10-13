@@ -10,12 +10,16 @@ use FFI::CheckLib qw(find_lib_or_die);
 use Exporter 'import';
 
 our @EXPORT_OK = qw(
+    duckdb_append_int32
+    duckdb_append_varchar
+    duckdb_append_null
     duckdb_appender_begin_row
     duckdb_appender_close
     duckdb_appender_create
     duckdb_appender_destroy
     duckdb_appender_destroy
     duckdb_appender_end_row
+    duckdb_appender_error
     duckdb_appender_flush
     duckdb_array_type_array_size
     duckdb_array_type_child_type
@@ -80,6 +84,7 @@ sub init {
     $ffi->type(opaque   => 'duckdb_connection');
     $ffi->type(opaque   => 'duckdb_data_chunk');
     $ffi->type(opaque   => 'duckdb_database');
+    $ffi->type(opaque   => 'duckdb_error_data');
     $ffi->type(opaque   => 'duckdb_logical_type');
     $ffi->type(opaque   => 'duckdb_prepared_statement');
     $ffi->type(opaque   => 'duckdb_vector');
@@ -166,6 +171,9 @@ sub init {
     $ffi->attach(duckdb_appender_flush     => ['duckdb_appender']                                    => 'duckdb_state');
     $ffi->attach(duckdb_append_null        => ['duckdb_appender']                                    => 'duckdb_state');
     $ffi->attach(duckdb_append_bool        => ['duckdb_appender', 'bool']                            => 'duckdb_state');
+    $ffi->attach(duckdb_append_varchar     => ['duckdb_appender', 'string']                          => 'duckdb_state');
+    $ffi->attach(duckdb_append_int32       => ['duckdb_appender', 'uint32_t']                        => 'duckdb_state');
+    $ffi->attach(duckdb_appender_error     => ['duckdb_appender']                                    => 'string');
 
     return 1;
 

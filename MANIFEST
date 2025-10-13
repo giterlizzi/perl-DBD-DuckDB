@@ -1,6 +1,7 @@
 Changes
 INSTALL.md
 lib/DBD/DuckDB.pm
+lib/DBD/DuckDB/Appender.pm
 lib/DBD/DuckDB/FFI.pm
 lib/DBD/DuckDB/GetInfo.pm
 lib/DBD/DuckDB/Type.pm
@@ -11,8 +12,10 @@ README.md
 t/00-load.t
 t/01-basic.t
 t/10-last-insert-id.t
+t/11-appender.t
 t/20-array.t
 t/20-blob.t
 t/21-timestamp.t
 t/22-struct.t
 t/lib/DuckDBTest.pm
+TODO.md

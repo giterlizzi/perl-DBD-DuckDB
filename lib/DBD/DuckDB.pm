@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.10';
+    our $VERSION = '0.11';
     $VERSION =~ tr/_//d;
 
     our $drh;
@@ -21,8 +21,12 @@ package DBD::DuckDB {
         DBI->setup_driver('DBD::DuckDB');
 
         unless ($methods_are_installed) {
+
+            DBD::DuckDB::db->install_method('x_duckdb_appender');
             DBD::DuckDB::db->install_method('x_duckdb_version');
+
             $methods_are_installed++;
+
         }
 
         my ($class, $attr) = @_;
@@ -132,10 +136,23 @@ package DBD::DuckDB::db {
 
     use DBD::DuckDB::FFI qw(:all);
     use DBD::DuckDB::Type;
+    use DBD::DuckDB::Appender;
+
 
     our $imp_data_size = 0;
 
     sub x_duckdb_version { DBD::DuckDB::FFI::duckdb_library_version() }
+
+    sub x_duckdb_appender {
+
+        my ($dbh, $table, $schema) = @_;
+
+        Carp::croak('Usage: $dbh->duckdb_appender($table [, $schema ])') unless $table;
+        $schema //= 'main';
+
+        return DBD::DuckDB::Appender->new(schema => $schema, table => $table, dbh => $dbh);
+
+    }
 
     sub get_info {
         my ($dbh, $info_type) = @_;

@@ -1,0 +1,12 @@
+Revision history for Perl extension DBD::DuckDB.
+
+0.10  2025-10-13
+	- First public release on GH
+	- Use vector instead of deprecated "duckdb_value_*" functions
+	- Added support for "array" and "struct" DuckDB type
+	- General optimizations
+	- Added "DBD::DuckDB::GetInfo"
+	- Added experimental "appender" utilities via "$dbh->x_duckdb_appender"
+
+0.01  2024-07-22
+	- Internal/testing release

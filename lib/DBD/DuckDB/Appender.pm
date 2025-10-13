@@ -3,9 +3,29 @@ package DBD::DuckDB::Appender;
 use strict;
 use warnings;
 
-use DBD::DuckDB::FFI  qw(:all);
-use DBD::DuckDB::Type qw(:all);
+use DBD::DuckDB::FFI       qw(:all);
+use DBD::DuckDB::Constants qw(:all);
 
+my %DUCKDB_APPEND_VALUE = (
+    DUCKDB_TYPE_BIGINT()    => \&duckdb_append_int64,
+    DUCKDB_TYPE_BOOLEAN()   => \&duckdb_append_bool,
+    DUCKDB_TYPE_DATE()      => \&duckdb_append_date,
+    DUCKDB_TYPE_DOUBLE()    => \&duckdb_append_double,
+    DUCKDB_TYPE_FLOAT()     => \&duckdb_append_float,
+    DUCKDB_TYPE_HUGEINT()   => \&duckdb_append_hugeint,
+    DUCKDB_TYPE_INTEGER()   => \&duckdb_append_int32,
+    DUCKDB_TYPE_INTERVAL()  => \&duckdb_append_interval,
+    DUCKDB_TYPE_SMALLINT()  => \&duckdb_append_int16,
+    DUCKDB_TYPE_TIME()      => \&duckdb_append_time,
+    DUCKDB_TYPE_TIMESTAMP() => \&duckdb_append_timestamp,
+    DUCKDB_TYPE_TINYINT()   => \&duckdb_append_int8,
+    DUCKDB_TYPE_UBIGINT()   => \&duckdb_append_uint64,
+    DUCKDB_TYPE_UHUGEINT()  => \&duckdb_append_uhugeint,
+    DUCKDB_TYPE_UINTEGER()  => \&duckdb_append_uint32,
+    DUCKDB_TYPE_USMALLINT() => \&duckdb_append_uint16,
+    DUCKDB_TYPE_UTINYINT()  => \&duckdb_append_uint8,
+    DUCKDB_TYPE_VARCHAR()   => \&duckdb_append_varchar,
+);
 
 sub new {
 
@@ -34,7 +54,6 @@ sub new {
 
 sub error { duckdb_appender_error(shift->{appender}) }
 
-
 sub append {
 
     my ($self, $value, $type) = @_;
@@ -45,51 +64,109 @@ sub append {
         return duckdb_append_null($self->{appender});
     }
 
-    if ($type == DUCKDB_TYPE_VARCHAR) {
-        return duckdb_append_varchar($self->{appender}, $value);
+    if ($type == DUCKDB_TYPE_BLOB) {
+        return duckdb_append_blob($value, length($value));
     }
 
-    if ($type == DUCKDB_TYPE_INTEGER) {
-        return duckdb_append_int32($self->{appender}, $value);
+    if (defined $DUCKDB_APPEND_VALUE{$type}) {
+        return $DUCKDB_APPEND_VALUE{$type}->($self->{appender}, $value);
     }
+
+}
+
+sub _guess_type {
+
+    my $value = shift;
+
+    return DUCKDB_TYPE_INTEGER if defined $value && $value =~ /^-?\d+\z/;
+    return DUCKDB_TYPE_DOUBLE  if defined $value && $value =~ /^-?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?\z/;
+    return DUCKDB_TYPE_BOOLEAN if defined $value && $value =~ /^(?:true|false|0|1)\z/i;
+    return DUCKDB_TYPE_VARCHAR;
+
+}
+
+sub append_row {
+
+    my ($self, %data) = @_;
+
+    my $cols = $self->{columns} // [];
+    $self->begin_row or return;
+
+    for my $col (@$cols) {
+        my $value = $data{$col};
+        my $type  = _guess_type($value);
+        $self->append($value, $type);
+    }
+
+    $self->end_row;
 
 }
 
 sub begin_row {
+
     my $self = shift;
     my $rc   = duckdb_appender_begin_row($self->{appender});
-    return $self->{dbh}->set_err(1, 'duckdb_appender_begin_row failed') if $rc;
+
+    if ($rc) {
+        return $self->{dbh}->set_err(1, $self->error // 'duckdb_appender_begin_row failed');
+    }
+
     return 1;
+
 }
 
 sub end_row {
+
     my $self = shift;
     my $rc   = duckdb_appender_end_row($self->{appender});
-    return $self->{dbh}->set_err(1, 'duckdb_appender_end_row failed') if $rc;
+
+    if ($rc) {
+        return $self->{dbh}->set_err(1, $self->error // 'duckdb_appender_end_row failed');
+    }
+
     return 1;
+
 }
 
 sub flush {
+
     my $self = shift;
     my $rc   = duckdb_appender_flush($self->{appender});
-    return $self->{dbh}->set_err(1, 'duckdb_appender_flush failed') if $rc;
+
+    if ($rc) {
+        return $self->{dbh}->set_err(1, $self->error // 'duckdb_appender_flush failed');
+    }
+
     return 1;
 
 }
 
 sub close {
+
     my $self = shift;
     my $rc   = duckdb_appender_close($self->{appender});
-    return $self->{dbh}->set_err(1, 'duckdb_appender_flush failed') if $rc;
+
+    if ($rc) {
+        return $self->{dbh}->set_err(1, $self->error // 'duckdb_appender_close failed');
+    }
+
     return 1;
+
 }
 
 sub destroy {
+
     my $self = shift;
     my $rc   = duckdb_appender_destroy(\$self->{appender});
-    return $self->{dbh}->set_err(1, 'duckdb_appender_destroy failed') if $rc;
+
+    if ($rc) {
+        return $self->{dbh}->set_err(1, $self->error // 'duckdb_appender_destroy failed');
+    }
+
     $self->{closed} = 1;
+
     return 1;
+
 }
 
 sub DESTROY {
@@ -98,3 +175,63 @@ sub DESTROY {
 }
 
 1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+DBD::DuckDB::Appender - Appender helper for DuckDB
+
+    use DBI;
+    use DBD::DuckDB::Constants qw(:duckdb_types);
+
+    my $dbh = DBI->connect("dbi:DuckDB:dbname=$dbname");
+
+    my $appender = $dbh->x_duckdb_appender('people');
+
+    $appender->append(1,            DUCKDB_TYPE_INTEGER);
+    $appender->append('Larry Wall', DUCKDB_TYPE_VARCHAR);
+    $appender->end_row;
+
+    $appender->append_row(id => 1, name => 'Larry Wall');
+    
+
+=head1 SUPPORT
+
+=head2 Bugs / Feature Requests
+
+Please report any bugs or feature requests through the issue tracker
+at L<https://github.com/giterlizzi/perl-DBD-DuckDB/issues>.
+You will be notified automatically of any progress on your issue.
+
+=head2 Source Code
+
+This is open source software.  The code repository is available for
+public review and contribution under the terms of the license.
+
+L<https://github.com/giterlizzi/perl-DBD-DuckDB>
+
+    git clone https://github.com/giterlizzi/perl-DBD-DuckDB.git
+
+
+=head1 AUTHOR
+
+=over 4
+
+=item * Giuseppe Di Terlizzi <gdt@cpan.org>
+
+=back
+
+
+=head1 LICENSE AND COPYRIGHT
+
+This software is copyright (c) 2024-2025 by Giuseppe Di Terlizzi.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

@@ -1,4 +1,4 @@
-package DBD::DuckDB::Type;
+package DBD::DuckDB::Constants;
 
 use strict;
 use warnings;
@@ -7,7 +7,7 @@ use v5.10;
 
 use Exporter 'import';
 
-my @duckdb_type = qw(
+our @DUCKDB_TYPES = qw(
     DUCKDB_TYPE_INVALID
     DUCKDB_TYPE_BOOLEAN
     DUCKDB_TYPE_TINYINT
@@ -50,17 +50,16 @@ my @duckdb_type = qw(
     DUCKDB_TYPE_TIME_NS
 );
 
-my @duckdb_result_type = qw(
+our @DUCKDB_RESULT_TYPES = qw(
     DUCKDB_RESULT_TYPE_INVALID
     DUCKDB_RESULT_TYPE_CHANGED_ROWS
     DUCKDB_RESULT_TYPE_NOTHING
     DUCKDB_RESULT_TYPE_QUERY_RESULT
 );
 
+our @EXPORT = (@DUCKDB_TYPES, @DUCKDB_RESULT_TYPES);
 
-our @EXPORT = (@duckdb_type, @duckdb_result_type);
-
-our %EXPORT_TAGS = (all => \@EXPORT, duckdb_type => \@duckdb_type, duckdb_result_type => \@duckdb_result_type);
+our %EXPORT_TAGS = (all => \@EXPORT, duckdb_types => \@DUCKDB_TYPES, duckdb_result_types => \@DUCKDB_RESULT_TYPES);
 
 # enum duckdb_type
 use constant {
@@ -115,3 +114,54 @@ use constant {
 };
 
 1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+DBD::DuckDB::Constants - Constants for DuckDB
+
+    use DBI;
+    use DBD::DuckDB::Constants qw(duckdb_types);
+
+    
+
+=head1 SUPPORT
+
+=head2 Bugs / Feature Requests
+
+Please report any bugs or feature requests through the issue tracker
+at L<https://github.com/giterlizzi/perl-DBD-DuckDB/issues>.
+You will be notified automatically of any progress on your issue.
+
+=head2 Source Code
+
+This is open source software.  The code repository is available for
+public review and contribution under the terms of the license.
+
+L<https://github.com/giterlizzi/perl-DBD-DuckDB>
+
+    git clone https://github.com/giterlizzi/perl-DBD-DuckDB.git
+
+
+=head1 AUTHOR
+
+=over 4
+
+=item * Giuseppe Di Terlizzi <gdt@cpan.org>
+
+=back
+
+
+=head1 LICENSE AND COPYRIGHT
+
+This software is copyright (c) 2024-2025 by Giuseppe Di Terlizzi.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

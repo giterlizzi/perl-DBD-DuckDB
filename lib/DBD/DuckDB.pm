@@ -51,7 +51,8 @@ package DBD::DuckDB {
 }
 
 
-package DBD::DuckDB::dr {
+package    # hide from PAUSE
+    DBD::DuckDB::dr {
 
     use strict;
     use warnings;
@@ -127,7 +128,8 @@ package DBD::DuckDB::dr {
 
 }
 
-package DBD::DuckDB::db {
+package    # hide from PAUSE
+    DBD::DuckDB::db {
 
     use strict;
     use warnings;
@@ -135,7 +137,6 @@ package DBD::DuckDB::db {
     use base qw(DBD::_::db);
 
     use DBD::DuckDB::FFI qw(:all);
-    use DBD::DuckDB::Type;
     use DBD::DuckDB::Appender;
 
 
@@ -270,6 +271,58 @@ package DBD::DuckDB::db {
 
     }
 
+    sub primary_key_info {
+
+        my ($dbh, $catalog, $schema, $table) = @_;
+
+        my @where = ();
+        my @bind  = ();
+
+        my $like = sub {
+
+            my ($col, $val) = @_;
+
+            return if !defined $val || $val eq '' || $val eq '%';
+
+            push @where, ($val =~ /[%_]/) ? "$col LIKE ? ESCAPE '\\'" : "$col = ?";
+            push @bind, $val;
+
+        };
+
+        $like->('kc.table_catalog', $catalog) if defined $catalog;
+        $like->('kc.table_schema',  $schema)  if defined $schema;
+        $like->('kc.table_name',    $table)   if defined $table;
+
+        my $sql = q{
+            SELECT
+                kc.table_catalog    AS TABLE_CAT,
+                kc.table_schema     AS TABLE_SCHEM,
+                kc.table_name       AS TABLE_NAME,
+                kc.column_name      AS COLUMN_NAME,
+                kc.ordinal_position AS KEY_SEQ,
+                tc.constraint_name  AS PK_NAME
+            FROM information_schema.table_constraints   AS tc
+            JOIN information_schema.key_column_usage    AS kc
+                ON  kc.constraint_catalog = tc.constraint_catalog
+                AND kc.constraint_schema  = tc.constraint_schema
+                AND kc.constraint_name    = tc.constraint_name
+            WHERE tc.constraint_type = 'PRIMARY KEY'
+        };
+
+        $sql .= ' AND ' . join(' AND ', @where) if @where;
+        $sql .= ' ORDER BY kc.table_catalog, kc.table_schema, kc.table_name, kc.ordinal_position';
+
+        my $sth = $dbh->prepare($sql) or return;
+        $sth->execute(@bind)          or return;
+        return $sth;
+
+    }
+
+    sub foreign_key_info {
+        my ($dbh, $pk_catalog, $pk_schema, $pk_table, $fk_catalog, $fk_schema, $fk_table) = @_;
+
+    }
+
     sub STORE {
         my ($dbh, $attr, $val) = @_;
 
@@ -322,7 +375,8 @@ package DBD::DuckDB::db {
 }
 
 
-package DBD::DuckDB::st {
+package    # hide from PAUSE
+    DBD::DuckDB::st {
 
     use strict;
     use warnings;
@@ -335,8 +389,8 @@ package DBD::DuckDB::st {
 
     use FFI::Platypus::Buffer qw( scalar_to_buffer buffer_to_scalar );
 
-    use DBD::DuckDB::FFI  qw(:all);
-    use DBD::DuckDB::Type qw(:all);
+    use DBD::DuckDB::FFI       qw(:all);
+    use DBD::DuckDB::Constants qw(:all);
 
     our $imp_data_size = 0;
 
@@ -717,3 +771,136 @@ package DBD::DuckDB::st {
 }
 
 1;
+
+__END__
+
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+DBD::DuckDB - DuckDB DBI driver
+
+=head1 SYNOPSIS
+  use DBI;
+  my $dbh = DBI->connect("dbi:DuckDB:dbname=$dbfile","","");
+
+=head1 DESCRIPTION
+
+DuckDB is a high-performance analytical database system. It is designed to be 
+fast, reliable, portable, and easy to use. DuckDB provides a rich SQL dialect 
+with support far beyond basic SQL. DuckDB supports arbitrary and nested 
+correlated subqueries, window functions, collations, complex types (arrays, 
+structs, maps), and several extensions designed to make SQL easier to use.
+
+L<https://duckdb.org>
+
+
+=head1 CLASS METHODS
+
+=over
+
+=item DBI->connect
+
+This method creates a database handle by connecting to a database, and is the 
+DBI equivalent of the "new" method.
+
+The connection string is always of the form: "dbi:DuckDB:dbname=<dbfile>"
+
+    my $dbh = DBI->connect("dbi:DucDB:dbname=$dbfile", "", "", $attr);
+
+DuckDB creates a file per a database.
+
+The file is opened in read/write mode, and will be created if it does not exist yet.
+
+Although the database is stored in a single file, the directory containing the 
+database file must be writable by DuckDB because the library will create 
+several temporary files there.
+
+If the filename C<$dbfile> is ":memory:", then a private, temporary in-memory 
+database is created for the connection. This in-memory database will vanish 
+when the database connection is closed. It is handy for your library tests.
+
+Connect Attributes:
+
+=over
+
+=item * B<duckdb_checkpoint_on_disconnect>
+
+=back
+
+=back
+
+=head1 DATABASE HANDLES
+
+=over
+
+=item $dbh->prepare
+
+=item $dbh->disconnect
+
+=item $dbh->table_info
+
+=item $dbh->tables
+
+=item $dbh->primary_key_info
+
+=item $dbh->ping
+
+=item $dbh->x_duckdb_version
+
+=item $dbh->x_duckdb_appender
+
+=back
+
+
+=head1 STATEMENT HANDLES
+
+=over
+
+=item $sth->bind_param
+
+=item $sth->execute
+
+=item $sth->rows
+
+=item $sth->finish
+
+=back
+
+
+=head1 SUPPORT
+
+=head2 Bugs / Feature Requests
+
+Please report any bugs or feature requests through the issue tracker
+at L<https://github.com/giterlizzi/perl-DBD-DuckDB/issues>.
+You will be notified automatically of any progress on your issue.
+
+=head2 Source Code
+
+This is open source software.  The code repository is available for
+public review and contribution under the terms of the license.
+
+L<https://github.com/giterlizzi/perl-DBD-DuckDB>
+
+    git clone https://github.com/giterlizzi/perl-DBD-DuckDB.git
+
+
+=head1 AUTHOR
+
+=over 4
+
+=item * Giuseppe Di Terlizzi <gdt@cpan.org>
+
+=back
+
+
+=head1 LICENSE AND COPYRIGHT
+
+This software is copyright (c) 2024-2025 by Giuseppe Di Terlizzi.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

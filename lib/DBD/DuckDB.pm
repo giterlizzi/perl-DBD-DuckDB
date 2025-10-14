@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.11';
+    our $VERSION = '0.12';
     $VERSION =~ tr/_//d;
 
     our $drh;
@@ -779,9 +779,11 @@ __END__
 =encoding utf-8
 
 =head1 NAME
+
 DBD::DuckDB - DuckDB DBI driver
 
 =head1 SYNOPSIS
+
   use DBI;
   my $dbh = DBI->connect("dbi:DuckDB:dbname=$dbfile","","");
 
@@ -849,7 +851,27 @@ Connect Attributes:
 
 =item $dbh->x_duckdb_version
 
+Return the current DuckDB library version using C<duckdb_library_version> C
+function.
+
 =item $dbh->x_duckdb_appender
+
+Appenders are the most efficient way of loading data into DuckDB from within 
+the C interface, and are recommended for fast data loading. The appender is 
+much faster than using prepared statements or individual INSERT INTO statements.
+
+    $dbh->do('CREATE TABLE people (id INTEGER, name VARCHAR)');
+    my $appender = $dbh->x_duckdb_appender('people');
+
+    $appender->append(1, DUCKDB_TYPE_INTEGER);
+    $appender->append('Mark', DUCKDB_TYPE_VARCHAR);
+    $appender->end_row;
+
+    # or
+
+    $appeder->append_row(id => 1, name => 'Mark');
+
+See L<DBD::DuckDB::Appender>.
 
 =back
 

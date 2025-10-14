@@ -379,6 +379,11 @@ DBD::DuckDB::FFI - DuckDB C functions
 
     say duckdb_library_version();
 
+=head1 DESCRIPTION
+
+L<DBD::DuckDB> use L<FFI::Platypus> for access to C<libduckdb> C library.
+
+
 
 =head1 SUPPORT
 

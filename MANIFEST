@@ -17,5 +17,9 @@ t/12-metadata.t
 t/20-array.t
 t/21-timestamp.t
 t/22-struct.t
+t/kwalitee.t
 t/lib/DuckDBTest.pm
+t/manifest.t
+t/pod-coverage.t
+t/pod.t
 TODO.md

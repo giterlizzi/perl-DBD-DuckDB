@@ -323,36 +323,71 @@ package    # hide from PAUSE
 
     }
 
+    sub rollback {
+
+        my $dbh = shift;
+
+        if ($dbh->FETCH('AutoCommit')) {
+            if ($dbh->FETCH('Warn')) {
+                warn("Rollback ineffective while AutoCommit is on");
+            }
+            return;
+        }
+
+        $dbh->do('ROLLBACK');
+        $dbh->do('BEGIN TRANSACTION');
+
+        return 1;
+
+    }
+
+    sub commit {
+
+        my $dbh = shift;
+
+        if ($dbh->FETCH('AutoCommit')) {
+            warn("Commit ineffective while AutoCommit is on") if ($dbh->FETCH('Warn'));
+            return;
+        }
+
+        $dbh->do('COMMIT');
+
+        return 1;
+
+    }
+
     sub STORE {
-        my ($dbh, $attr, $val) = @_;
+        my ($dbh, $attr, $value) = @_;
 
         if ($attr =~ /^duckdb_/) {
-            $dbh->{$attr} = $val;
+            $dbh->{$attr} = $value;
             return 1;
         }
 
         if ($attr eq 'AutoCommit') {
 
-            my $sql = $val ? 'COMMIT' : 'BEGIN';
+            my $old_value = $dbh->{AutoCommit};
+            my $never_set = !$old_value;
 
-            my $res = DBD::DuckDB::FFI::Result->new;
-            my $rc  = duckdb_query($dbh->{duckdb_conn}, $sql, $res);
-            my $err = duckdb_result_error($res);
+            if (!$old_value && $value && $never_set) {
 
-            duckdb_destroy_result($res);
-
-            if ($rc) {
-                unless ($err =~ /no transaction is active/) {
-                    return $dbh->set_err(1, "$sql failed");
-                }
+                # DuckDB auto commit
+            }
+            elsif (!$old_value && $value) {
+                $dbh->trace_msg("    -> DuckDB: commit changes\n");
+                $dbh->do('COMMIT');
+            }
+            elsif ($old_value && !$value || !$old_value && !$value && $never_set) {
+                $dbh->trace_msg("    -> DuckDB: start transaction\n");
+                $dbh->do('BEGIN TRANSACTION');
             }
 
-            $dbh->{AutoCommit} = $val ? 1 : 0;
+            $dbh->{AutoCommit} = $value;
             return 1;
 
         }
 
-        $dbh->SUPER::STORE($attr, $val);
+        $dbh->SUPER::STORE($attr, $value);
     }
 
     sub FETCH {
@@ -363,8 +398,7 @@ package    # hide from PAUSE
         }
 
         return $dbh->{AutoCommit} if $attr eq 'AutoCommit';
-
-        $dbh->SUPER::FETCH($attr);
+        return $dbh->SUPER::FETCH($attr);
     }
 
     sub DESTROY {
@@ -839,15 +873,111 @@ Connect Attributes:
 
 =item $dbh->prepare
 
+    $sth = $dbh->prepare($statement, \%attr);
+
+=item $dbh->do
+
+    $rv = $dbh->do($statement);
+    $rv = $dbh->do($statement, \%attr);
+    $rv = $dbh->do($statement, \%attr, @bind_values);
+
+Prepare and execute a single statement. Returns the number of rows affected if 
+the query was successful, returns undef if an error occurred, and returns -1 if 
+the number of rows is unknown or not available. Note that this method will 
+return B<0E0> instead of 0 for 'no rows were affected', in order to always 
+return a true value if no error occurred.
+
+=item $dbh->last_insert_id
+
+DuckDB does not implement auto_increment of serial type columns it uses 
+predefined sequences where the id numbers are either selected before insert, at 
+insert time, or as part of the query.
+
+    $dbh->do('CREATE SEQUENCE id_sequence START 1');
+
+    $dbh->do( q{CREATE TABLE tbl (
+        id INTEGER DEFAULT nextval('id_sequence'),
+        s VARCHAR
+    } );
+
+    $dbh->do( q{INSERT INTO tbl (s) VALUES ('hello'), ('world')} );
+
+See L<https://duckdb.org/docs/stable/sql/statements/create_sequence.html>.
+
+=item $dbh->commit
+
+    $rv = $dbh->commit;
+
+=item $dbh->rollback;
+
+    $rv = $dbh->rollback;
+
+=item $dbh->begin_work
+
+This method turns on transactions until the next call to "commit" or "rollback",
+if AutoCommit is currently enabled. If it is not enabled, calling begin_work will
+issue an error. Note that the transaction will not actually begin until the first
+statement after begin_work is called.
+
+Example:
+
+    $dbh->{AutoCommit} = 1;
+    $dbh->do('INSERT INTO foo VALUES (123)'); ## Changes committed immediately
+    $dbh->begin_work();
+    ## Not in a transaction yet, but AutoCommit is set to 0
+
+    $dbh->do("INSERT INTO foo VALUES (345)");
+    ## DuckDB actually issues two statements here:
+    ## BEGIN;
+    ## INSERT INTO foo VALUES (345)
+    ## We are now in a transaction
+
+    $dbh->commit();
+    ## AutoCommit is now set to 1 again
+
 =item $dbh->disconnect
 
 =item $dbh->table_info
 
+    $sth = $dbh->table_info($catalog, $schema, $table, $type, \%attr);
+
+Returns all tables and schemas (databases) as specified in L<DBI/table_info>.
+The schema and table arguments will do a C<LIKE> search. You can specify an
+ESCAPE character by including an 'Escape' attribute in \%attr. The C<$type>
+argument accepts a comma separated list of the following types 'TABLE',
+'INDEX', 'VIEW' and 'TRIGGER' (by default all are returned).
+Note that a statement handle is returned, and not a direct list of tables.
+The following fields are returned:
+
+=over
+
+=item * B<TABLE_CAT>: The name of the catalog.
+
+=item * B<TABLE_SCHEM>: The name of the schema (database) that the table or view is
+in. The default schema is 'main' and other databases will be in the name given when
+the database was attached.
+
+B<TABLE_NAME>: The name of the table or view.
+
+B<TABLE_TYPE>: The type of object returned. Will be one of 'TABLE', 'INDEX',
+'VIEW', 'TRIGGER'.
+
 =item $dbh->tables
 
-=item $dbh->primary_key_info
+=item $dbh->primary_key, $dbh->primary_key_info
+
+    @names = $dbh->primary_key(undef, $schema, $table);
+    $sth   = $dbh->primary_key_info(undef, $schema, $table, \%attr);
+
+You can retrieve primary key names or more detailed information.
 
 =item $dbh->ping
+
+    my $bool = $dbh->ping;
+
+Returns true if the database file exists (or the database is in-memory), and
+the database connection is active.
+
 
 =item $dbh->x_duckdb_version
 

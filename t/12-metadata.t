@@ -27,9 +27,11 @@ SCOPE: {
 
 SCOPE: {
     my $primary_keys = $dbh->primary_key_info(undef, undef, 't1');
+    my @primary_keys = $dbh->primary_key(undef, undef, 't1');
     my $row          = $primary_keys->fetchrow_hashref;
 
     is $row->{COLUMN_NAME}, 'i', 'Primary key';
+    is_deeply @primary_keys, ('i');
 }
 
 done_testing;

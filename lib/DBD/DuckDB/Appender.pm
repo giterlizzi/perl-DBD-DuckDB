@@ -198,7 +198,59 @@ DBD::DuckDB::Appender - Appender helper for DuckDB
     $appender->end_row;
 
     $appender->append_row(id => 1, name => 'Larry Wall');
-    
+
+=head1 DESCRIPTION
+
+Appenders are the most efficient way of loading data into DuckDB from within 
+the C interface, and are recommended for fast data loading. The appender is 
+much faster than using prepared statements or individual INSERT INTO statements.
+
+=head1 METHODS
+
+=head3 B<append>
+
+    $appender->append($value, $type);
+
+Append a single column.
+
+=head3 B<append_row>
+
+    $appender->append_row(%row_data);
+
+Append a single row.
+
+=head3 B<error>
+
+    my $err = $appender->error;
+
+Returns the error message associated with the appender. If the appender has no error
+message, this returns undef instead.
+
+=head3 B<destroy>
+
+    my $rc = $appender->destroy;
+
+Closes the appender by flushing all intermediate states to the table and 
+destroying it. By destroying it, this function de-allocates all memory 
+associated with the appender. If flushing the data triggers a constraint 
+violation, then all data is invalidated, and this function returns error.
+
+=head3 B<flush>
+
+    my $rc = $appender->flush;
+
+Flush the appender to the table, forcing the cache of the appender to be 
+cleared. If flushing the data triggers a constraint violation or any other 
+error, then all data is invalidated, and this function returns error. It 
+is not possible to append more values.
+
+=head3 B<close>
+
+    my $rc = $appender->close;
+
+Closes the appender by flushing all intermediate states and closing it for 
+further appends. If flushing the data triggers a constraint violation or any 
+other error, then all data is invalidated, and this function returns error.
 
 =head1 SUPPORT
 

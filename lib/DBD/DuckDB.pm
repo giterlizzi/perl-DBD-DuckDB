@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.12';
+    our $VERSION = '0.13';
     $VERSION =~ tr/_//d;
 
     our $drh;
@@ -319,7 +319,134 @@ package    # hide from PAUSE
     }
 
     sub foreign_key_info {
+
         my ($dbh, $pk_catalog, $pk_schema, $pk_table, $fk_catalog, $fk_schema, $fk_table) = @_;
+
+        my @where = ();
+        my @bind  = ();
+
+        my $like = sub {
+
+            my ($col, $val) = @_;
+
+            return if !defined $val || $val eq '' || $val eq '%';
+
+            push @where, ($val =~ /[%_]/) ? "$col LIKE ? ESCAPE '\\'" : "$col = ?";
+            push @bind, $val;
+
+        };
+
+        $like->('kc.table_catalog', $pk_catalog) if defined $pk_catalog;
+        $like->('uk.table_schema',  $pk_schema)  if defined $pk_schema;
+        $like->('uk.table_name',    $pk_table)   if defined $pk_table;
+        $like->('fk.table_catalog', $fk_catalog) if defined $fk_catalog;
+        $like->('fk.table_schema',  $fk_schema)  if defined $fk_schema;
+        $like->('fk.table_name',    $fk_table)   if defined $fk_table;
+
+        my $sql = q{
+            SELECT
+              uk.table_catalog      AS UK_TABLE_CAT,
+              uk.table_schema       AS UK_TABLE_SCHEM,
+              uk.table_name         AS UK_TABLE_NAME,
+              ku.column_name        AS UK_COLUMN_NAME,
+              fk.table_catalog      AS FK_TABLE_CAT,
+              fk.table_schema       AS FK_TABLE_SCHEM,
+              fk.table_name         AS FK_TABLE_NAME,
+              kf.column_name        AS FK_COLUMN_NAME,
+              kf.ordinal_position   AS ORDINAL_POSITION,
+              rc.update_rule        AS UPDATE_RULE,
+              rc.delete_rule        AS DELETE_RULE,
+              fk.constraint_name    AS FK_NAME,
+              uk.constraint_name    AS UK_NAME,
+              CAST(NULL AS INTEGER) AS DEFERABILITY,   -- ??
+              CASE
+                WHEN UPPER(uk.constraint_type) = 'PRIMARY KEY' THEN 'P'
+                ELSE 'U'
+              END AS UNIQUE_OR_PRIMARY
+            FROM information_schema.table_constraints AS fk
+            JOIN information_schema.key_column_usage AS kf
+              ON  kf.constraint_catalog = fk.constraint_catalog
+              AND kf.constraint_schema  = fk.constraint_schema
+              AND kf.constraint_name    = fk.constraint_name
+            JOIN information_schema.referential_constraints AS rc
+              ON  rc.constraint_catalog = fk.constraint_catalog
+              AND rc.constraint_schema  = fk.constraint_schema
+              AND rc.constraint_name    = fk.constraint_name
+            JOIN information_schema.table_constraints AS uk
+              ON  uk.constraint_catalog = rc.unique_constraint_catalog
+              AND uk.constraint_schema  = rc.unique_constraint_schema
+              AND uk.constraint_name    = rc.unique_constraint_name
+            JOIN information_schema.key_column_usage AS ku
+              ON  ku.constraint_catalog = uk.constraint_catalog
+              AND ku.constraint_schema  = uk.constraint_schema
+              AND ku.constraint_name    = uk.constraint_name
+              AND COALESCE(ku.ordinal_position, 0) = COALESCE(kf.position_in_unique_constraint, kf.ordinal_position, 0)
+            WHERE fk.constraint_type = 'FOREIGN KEY'
+        };
+
+        $sql .= ' AND ' . join(' AND ', @where) if @where;
+        $sql .= ' ORDER BY fk.table_catalog, fk.table_schema, fk.table_name, kf.ordinal_position;';
+
+        my $sth = $dbh->prepare($sql) or return;
+        $sth->execute(@bind)          or return;
+        return $sth;
+
+    }
+
+
+    sub type_info_all {
+
+        my $PS  = 'precision,scale';
+        my $LEN = 'length';
+        my $UN;
+
+        my $ti = [
+            {
+                TYPE_NAME          => 0,
+                DATA_TYPE          => 1,
+                COLUMN_SIZE        => 2,
+                LITERAL_PREFIX     => 3,
+                LITERAL_SUFFIX     => 4,
+                CREATE_PARAMS      => 5,
+                NULLABLE           => 6,
+                CASE_SENSITIVE     => 7,
+                SEARCHABLE         => 8,
+                UNSIGNED_ATTRIBUTE => 9,
+                FIXED_PREC_SCALE   => 10,
+                AUTO_UNIQUE_VALUE  => 11,
+                LOCAL_TYPE_NAME    => 12,
+                MINIMUM_SCALE      => 13,
+                MAXIMUM_SCALE      => 14,
+                SQL_DATA_TYPE      => 15,
+                SQL_DATETIME_SUB   => 16,
+                NUM_PREC_RADIX     => 17,
+                INTERVAL_PRECISION => 18,
+            },
+            ['ARRAY',     SQL_ALL_TYPES, $UN, $UN,  $UN, $UN,  1, 0, 0, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['BIGINT',    SQL_BIGINT,    19,  $UN,  $UN, $UN,  1, 0, 3, 0,   0, $UN, $UN, $UN, $UN, $UN, $UN, 10,  $UN],
+            ['BLOB',      SQL_BLOB,      $UN, "X'", "'", $UN,  1, 0, 0, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['BOOLEAN',   SQL_BOOLEAN,   1,   $UN,  $UN, $UN,  1, 0, 3, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['DATE',      SQL_DATE,      10,  "'",  "'", $UN,  1, 0, 3, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['DECIMAL',   SQL_DECIMAL,   38,  $UN,  $UN, $PS,  1, 0, 3, 0,   1, $UN, $UN, 0,   38,  $UN, $UN, 10,  $UN],
+            ['DOUBLE',    SQL_DOUBLE,    53,  $UN,  $UN, $UN,  1, 0, 3, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, 2,   $UN],
+            ['INTEGER',   SQL_INTEGER,   10,  $UN,  $UN, $UN,  1, 0, 3, 0,   0, $UN, $UN, $UN, $UN, $UN, $UN, 10,  $UN],
+            ['INTERVAL',  SQL_INTERVAL,  $UN, "'",  "'", $UN,  1, 0, 3, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['LIST',      SQL_ALL_TYPES, $UN, $UN,  $UN, $UN,  1, 0, 0, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['REAL',      SQL_REAL,      24,  $UN,  $UN, $UN,  1, 0, 3, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, 2,   $UN],
+            ['SMALLINT',  SQL_SMALLINT,  5,   $UN,  $UN, $UN,  1, 0, 3, 0,   0, $UN, $UN, $UN, $UN, $UN, $UN, 10,  $UN],
+            ['STRUCT',    SQL_ALL_TYPES, $UN, $UN,  $UN, $UN,  1, 0, 0, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['TIME',      SQL_TIME,      8,   "'",  "'", $UN,  1, 0, 3, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['TIMESTAMP', SQL_TIMESTAMP, 26,  "'",  "'", $UN,  1, 0, 3, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['TINYINT',   SQL_TINYINT,   3,   $UN,  $UN, $UN,  1, 0, 3, 0,   0, $UN, $UN, $UN, $UN, $UN, $UN, 10,  $UN],
+            ['UBIGINT',   SQL_BIGINT,    20,  $UN,  $UN, $UN,  1, 0, 3, 1,   0, $UN, $UN, $UN, $UN, $UN, $UN, 10,  $UN],
+            ['UINTEGER',  SQL_INTEGER,   10,  $UN,  $UN, $UN,  1, 0, 3, 1,   0, $UN, $UN, $UN, $UN, $UN, $UN, 10,  $UN],
+            ['USMALLINT', SQL_SMALLINT,  5,   $UN,  $UN, $UN,  1, 0, 3, 1,   0, $UN, $UN, $UN, $UN, $UN, $UN, 10,  $UN],
+            ['UTINYINT',  SQL_TINYINT,   3,   $UN,  $UN, $UN,  1, 0, 3, 1,   0, $UN, $UN, $UN, $UN, $UN, $UN, 10,  $UN],
+            ['UUID',      SQL_VARCHAR,   36,  "'",  "'", $UN,  1, 0, 3, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+            ['VARCHAR',   SQL_VARCHAR,   $UN, "'",  "'", $LEN, 1, 1, 1, $UN, 0, $UN, $UN, $UN, $UN, $UN, $UN, $UN, $UN],
+        ];
+
+        return $ti;
 
     }
 
@@ -435,9 +562,10 @@ package    # hide from PAUSE
 
         return $attr         if defined $attr        && !ref $attr;
         return $attr->{TYPE} if ref($attr) eq 'HASH' && exists $attr->{TYPE};
-        return SQL_INTEGER   if defined $value       && $value =~ /^-?\d+\z/;
-        return SQL_DOUBLE    if defined $value       && $value =~ /^-?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?\z/;
-        return SQL_BOOLEAN   if defined $value       && $value =~ /^(?:true|false|0|1)\z/i;
+
+        return SQL_INTEGER if defined $value && $value =~ /^-?\d+\z/;
+        return SQL_DOUBLE  if defined $value && $value =~ /^-?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?\z/;
+        return SQL_BOOLEAN if defined $value && $value =~ /^(?:true|false|0|1)\z/i;
         return SQL_VARCHAR;
 
     }
@@ -479,6 +607,8 @@ package    # hide from PAUSE
             return $rc ? $sth->set_err(1, "duckdb_bind_blob failed at $i") : 1;
 
         }
+
+        # Fallback
 
         my $rc = duckdb_bind_varchar($duckdb_stmt, $i, "$value");
         return $rc ? $sth->set_err(1, "duckdb_bind_varchar failed at $i") : 1;
@@ -772,8 +902,6 @@ package    # hide from PAUSE
             $sth->{chunk} = undef;
         }
 
-        #warn Dumper(\@row);
-
         map {s/\s+$//} @row if $sth->FETCH('ChopBlanks');
         return $sth->_set_fbav(\@row);
 
@@ -814,7 +942,7 @@ __END__
 
 =head1 NAME
 
-DBD::DuckDB - DuckDB DBI driver
+DBD::DuckDB - DuckDB database driver for the DBI module
 
 =head1 SYNOPSIS
 
@@ -831,12 +959,72 @@ structs, maps), and several extensions designed to make SQL easier to use.
 
 L<https://duckdb.org>
 
+=head1 MODULE DOCUMENTATION
 
-=head1 CLASS METHODS
+This documentation describes driver specific behavior and restrictions. It is
+not supposed to be used as the only reference for the user. In any case
+consult the B<DBI> documentation first!
+
+L<Latest DBI documentation.|DBI>
+
+=head1 SETUP
+
+To use L<DBD::DuckDB>, the native DuckDB library must be available when the
+module is loaded.  There are two common ways to satisfy this requirement.
+
+=head2 Manual installation
 
 =over
 
-=item DBI->connect
+=item * Download the library
+
+    $ wget https://github.com/duckdb/duckdb/releases/download/v$VERSION/libduckdb-linux-amd64.zip
+    $ unzip duckdb-linux-amd64.zip
+    $ sudo cp libduckdb.so /usr/lib64/          # or another system library directory
+
+=item * Update the library search path
+
+If the library was not placed in a directory already listed in
+C</etc/ld.so.conf> (or equivalent), add its location to
+C<LD_LIBRARY_PATH>:
+
+    $ export LD_LIBRARY_PATH=/usr/lib64:$LD_LIBRARY_PATH
+
+or add the directory to C</etc/ld.so.conf> and run:
+
+    $ sudo ldconfig
+
+=back
+
+=head2 Use L<Alien::DuckDB>
+
+L<Alien::DuckDB> is a CPAN module that automatically downloads,
+builds, and installs the native DuckDB library for the current platform.
+
+=over
+
+=item * Install the Alien module
+
+    $ cpanm Alien::DuckDB
+
+    # or
+
+    $ perl -MCPAN -e 'install Alien::DuckDB'
+
+=item * DBD::DuckDB detects Alien automatically
+
+No environment variables or manual copying of *.so files are needed;
+when you C<use DBD::DuckDB>, the module calls
+C<Alien::DuckDB->dynamic_lib> to obtain the correct library path.
+
+=back
+
+
+=head1 THE DBI CLASS
+
+=head2 DBI Class Methods
+
+=head3 B<connect>
 
 This method creates a database handle by connecting to a database, and is the 
 DBI equivalent of the "new" method.
@@ -857,7 +1045,7 @@ If the filename C<$dbfile> is ":memory:", then a private, temporary in-memory
 database is created for the connection. This in-memory database will vanish 
 when the database connection is closed. It is handy for your library tests.
 
-Connect Attributes:
+=head2 Connect Attributes
 
 =over
 
@@ -865,17 +1053,100 @@ Connect Attributes:
 
 =back
 
-=back
 
-=head1 DATABASE HANDLES
+=head2 Methods Common To All Handles
 
-=over
+For all of the methods below, B<$h> can be either a database handle (B<$dbh>) 
+or a statement handle (B<$sth>). Note that I<$dbh> and I<$sth> can be replaced with 
+any variable name you choose: these are just the names most often used. Another 
+common variable used in this documentation is $I<rv>, which stands for "return value".
 
-=item $dbh->prepare
+=head3 B<err>
+
+    $rv = $h->err;
+
+Returns the error code from the last method called. 
+
+=head3 B<errstr>
+
+    $str = $h->errstr;
+
+Returns the last error that was reported by DuckDB. 
+
+=head3 B<state>
+
+    $str = $h->state;
+
+Returns a five-character "SQLSTATE" code. Success is indicated by a C<00000> code, which 
+gets mapped to an empty string by DBI.
+
+Note that the specific success code C<00000> is translated to any empty string
+(false). DuckDB does not support SQLSTATE then state() will return C<S1000> (General Error)
+for all errors.
+
+=head3 B<trace>
+
+    $h->trace($trace_settings);
+    $h->trace($trace_settings, $trace_filename);
+    $trace_settings = $h->trace;
+
+Changes the trace settings on a database or statement handle. 
+The optional second argument specifies a file to write the 
+trace information to. If no filename is given, the information 
+is written to F<STDERR>. Note that tracing can be set globally as 
+well by setting C<< DBI->trace >>, or by using the environment 
+variable I<DBI_TRACE>.
+
+=head3 B<trace_msg>
+
+    $h->trace_msg($message_text);
+    $h->trace_msg($message_text, $min_level);
+
+Writes a message to the current trace output (as set by the L</trace> method). If a second argument 
+is given, the message is only written if the current tracing level is equal to or greater than 
+the C<$min_level>.
+
+=head3 B<Other common methods>
+
+See the L<DBI> documentation for full details.
+
+
+=head1 DBI DATABASE HANDLE OBJECTS
+
+=head2 Database Handle Methods
+
+=head3 B<selectall_arrayref>
+
+    $ary_ref = $dbh->selectall_arrayref($sql);
+    $ary_ref = $dbh->selectall_arrayref($sql, \%attr);
+    $ary_ref = $dbh->selectall_arrayref($sql, \%attr, @bind_values);
+
+Returns a reference to an array containing the rows returned by preparing and
+executing the SQL string. See the L<DBI> documentation for full details.
+
+=head3 B<selectcol_arrayref>
+  
+    $ary_ref = $dbh->selectcol_arrayref($sql, \%attr, @bind_values);
+
+Returns a reference to an array containing the first column from each rows 
+returned by preparing and executing the SQL string. It is possible to specify 
+exactly which columns to return. See the L<DBI> documentation for full details.
+
+=head3 B<prepare>
 
     $sth = $dbh->prepare($statement, \%attr);
 
-=item $dbh->do
+Prepares a statement for later execution by the database engine and returns a
+reference to a statement handle object.
+
+=head3 B<prepare_cached>
+
+    $sth = $dbh->prepare_cached($statement, \%attr);
+
+Implemented by DBI, no driver-specific impact. This method is most useful if
+the same query is used over and over as it will cut down round trips to the server.
+
+=head3 B<do>
 
     $rv = $dbh->do($statement);
     $rv = $dbh->do($statement, \%attr);
@@ -887,7 +1158,7 @@ the number of rows is unknown or not available. Note that this method will
 return B<0E0> instead of 0 for 'no rows were affected', in order to always 
 return a true value if no error occurred.
 
-=item $dbh->last_insert_id
+=head3 B<last_insert_id>
 
 DuckDB does not implement auto_increment of serial type columns it uses 
 predefined sequences where the id numbers are either selected before insert, at 
@@ -904,15 +1175,24 @@ insert time, or as part of the query.
 
 See L<https://duckdb.org/docs/stable/sql/statements/create_sequence.html>.
 
-=item $dbh->commit
+=head3 B<commit>
 
     $rv = $dbh->commit;
 
-=item $dbh->rollback;
+Issues a COMMIT to DuckDB, indicating that the current transaction is 
+finished and that all changes made will be visible to other processes. If 
+AutoCommit is enabled, then a warning is given and no COMMIT is issued. Returns 
+true on success, false on error.
+
+=head3 B<rollback>
 
     $rv = $dbh->rollback;
 
-=item $dbh->begin_work
+Issues a ROLLBACK to DuckDB, which discards any changes made in the current 
+transaction. If AutoCommit is enabled, then a warning is given and no ROLLBACK 
+is issued. Returns true on success, and false on error.
+
+=head3 B<begin_work>
 
 This method turns on transactions until the next call to "commit" or "rollback",
 if AutoCommit is currently enabled. If it is not enabled, calling begin_work will
@@ -935,9 +1215,31 @@ Example:
     $dbh->commit();
     ## AutoCommit is now set to 1 again
 
-=item $dbh->disconnect
+=head3 B<disconnect>
 
-=item $dbh->table_info
+    $rv = $dbh->disconnect;
+
+Disconnects from the DuckDB database. Any uncommitted changes will be rolled 
+back upon disconnection. It's good policy to always explicitly call commit or 
+rollback at some point before disconnecting, rather than relying on the default 
+rollback behavior.
+
+If the script exits before disconnect is called (or, more precisely, if the 
+database handle is no longer referenced by anything), then the database 
+handle's DESTROY method will call the rollback() and disconnect() methods 
+automatically. It is best to explicitly disconnect rather than rely on this 
+behavior.
+
+=head3 B<quote>
+
+    $rv = $dbh->quote($value, $data_type);
+
+=head3 B<quote_identifier>
+
+    $string = $dbh->quote_identifier( $name );
+    $string = $dbh->quote_identifier( undef, $schema, $table);
+
+=head3 B<table_info>
 
     $sth = $dbh->table_info($catalog, $schema, $table, $type, \%attr);
 
@@ -962,29 +1264,60 @@ B<TABLE_NAME>: The name of the table or view.
 B<TABLE_TYPE>: The type of object returned. Will be one of 'TABLE', 'INDEX',
 'VIEW', 'TRIGGER'.
 
-=item $dbh->tables
+=back
 
-=item $dbh->primary_key, $dbh->primary_key_info
+=head3 B<tables>
+
+    @names = $dbh->tables( undef, $schema, $table, $type, \%attr );
+
+Supported by this driver as proposed by DBI. This method returns all tables
+and/or views (including foreign tables and materialized views) which are
+visible to the current user: see L</table_info> for more information about
+the arguments.
+
+=head3 B<type_info_all>
+
+    $type_info_all = $dbh->type_info_all;
+
+Supported by this driver as proposed by DBI. Information is only provided for
+SQL datatypes and for frequently used datatypes.
+
+=head3 B<type_info>
+
+    @type_info = $dbh->type_info($data_type);
+
+Returns a list of hash references holding information about one or more variants of $data_type. 
+See the DBI documentation for more details.
+
+=head3 B<primary_key primary_key_info>
 
     @names = $dbh->primary_key(undef, $schema, $table);
     $sth   = $dbh->primary_key_info(undef, $schema, $table, \%attr);
 
 You can retrieve primary key names or more detailed information.
 
-=item $dbh->ping
+=head3 B<foreign_key_info>
+
+    $sth = $dbh->foreign_key_info( $pk_catalog, $pk_schema, $pk_table,
+                                   $fk_catalog, $fk_schema, $fk_table );
+
+Supported by this driver as proposed by DBI, using the SQL/CLI variant.
+
+=head3 B<ping>
 
     my $bool = $dbh->ping;
 
 Returns true if the database file exists (or the database is in-memory), and
 the database connection is active.
 
+=head2 DuckDB methods
 
-=item $dbh->x_duckdb_version
+=head3 B<x_duckdb_version>
 
 Return the current DuckDB library version using C<duckdb_library_version> C
 function.
 
-=item $dbh->x_duckdb_appender
+=head3 B<x_duckdb_appender>
 
 Appenders are the most efficient way of loading data into DuckDB from within 
 the C interface, and are recommended for fast data loading. The appender is 
@@ -1003,22 +1336,151 @@ much faster than using prepared statements or individual INSERT INTO statements.
 
 See L<DBD::DuckDB::Appender>.
 
-=back
 
 
-=head1 STATEMENT HANDLES
+=head1 DBI STATEMENT HANDLE OBJECTS
 
-=over
+=head2 Statement Handle Methods
 
-=item $sth->bind_param
+=head3 B<bind_param>
 
-=item $sth->execute
+    $rv = $sth->bind_param($param_num, $bind_value);
+    $rv = $sth->bind_param($param_num, $bind_value, $bind_type);
+    $rv = $sth->bind_param($param_num, $bind_value, \%attr);
 
-=item $sth->rows
+Allows the user to bind a value and/or a data type to a placeholder.
 
-=item $sth->finish
+=head3 B<bind_param_array>
 
-=back
+    $rv = $sth->bind_param_array($param_num, $array_ref_or_value)
+    $rv = $sth->bind_param_array($param_num, $array_ref_or_value, $bind_type)
+    $rv = $sth->bind_param_array($param_num, $array_ref_or_value, \%attr)
+
+Binds an array of values to a placeholder, so that each is used in turn by a call 
+to the L</execute_array> method.
+
+=head3 B<execute>
+
+    $rv = $sth->execute(@bind_values);
+
+Perform whatever processing is necessary to execute the prepared statement.
+
+=head3 B<execute_array>
+
+    $tuples = $sth->execute_array() or die $sth->errstr;
+    $tuples = $sth->execute_array(\%attr) or die $sth->errstr;
+    $tuples = $sth->execute_array(\%attr, @bind_values) or die $sth->errstr;
+    ($tuples, $rows) = $sth->execute_array(\%attr) or die $sth->errstr;
+    ($tuples, $rows) = $sth->execute_array(\%attr, @bind_values) or die $sth->errstr;
+
+Execute a prepared statement once for each item in a passed-in hashref, or items that 
+were previously bound via the L</bind_param_array> method. See the L<DBI> documentation 
+for more details.
+
+=head3 B<execute_for_fetch>
+
+    $tuples = $sth->execute_for_fetch($fetch_tuple_sub);
+    $tuples = $sth->execute_for_fetch($fetch_tuple_sub, \@tuple_status);
+    ($tuples, $rows) = $sth->execute_for_fetch($fetch_tuple_sub);
+    ($tuples, $rows) = $sth->execute_for_fetch($fetch_tuple_sub, \@tuple_status);
+
+Used internally by the L</execute_array> method, and rarely used directly. See the 
+L<DBI> documentation for more details.
+
+
+=head3 B<fetchrow_arrayref>
+
+    $ary_ref = $sth->fetchrow_arrayref;
+
+Fetches the next row of data from the statement handle, and returns a reference to an array 
+holding the column values. Any columns that are NULL are returned as undef within the array.
+
+If there are no more rows or if an error occurs, then this method return undef. You should 
+check C<< $sth->err >> afterwards (or use the L<RaiseError|/RaiseError (boolean, inherited)> attribute) to discover if the undef returned 
+was due to an error.
+
+Note that the same array reference is returned for each fetch, so don't store the reference and 
+then use it after a later fetch. Also, the elements of the array are also reused for each row, 
+so take care if you want to take a reference to an element. See also L</bind_columns>.
+
+=head3 B<fetchrow_array>
+
+    @ary = $sth->fetchrow_array;
+
+Similar to the L</fetchrow_arrayref> method, but returns a list of column information rather than 
+a reference to a list. Do not use this in a scalar context.
+
+=head3 B<fetchrow_hashref>
+
+    $hash_ref = $sth->fetchrow_hashref;
+    $hash_ref = $sth->fetchrow_hashref($name);
+
+Fetches the next row of data and returns a hashref containing the name of the columns as the keys 
+and the data itself as the values. Any NULL value is returned as an undef value.
+
+If there are no more rows or if an error occurs, then this method return undef. You should 
+check C<< $sth->err >> afterwards (or use the L<RaiseError|/RaiseError (boolean, inherited)> attribute) to discover if the undef returned 
+was due to an error.
+
+The optional C<$name> argument should be either C<NAME>, C<NAME_lc> or C<NAME_uc>, and indicates 
+what sort of transformation to make to the keys in the hash.
+
+=head3 B<fetchall_arrayref>
+
+    $tbl_ary_ref = $sth->fetchall_arrayref();
+    $tbl_ary_ref = $sth->fetchall_arrayref( $slice );
+    $tbl_ary_ref = $sth->fetchall_arrayref( $slice, $max_rows );
+
+Returns a reference to an array of arrays that contains all the remaining rows to be fetched from the 
+statement handle. If there are no more rows, an empty arrayref will be returned. If an error occurs, 
+the data read in so far will be returned. Because of this, you should always check C<< $sth->err >> after 
+calling this method, unless L<RaiseError|/RaiseError (boolean, inherited)> has been enabled.
+
+If C<$slice> is an array reference, fetchall_arrayref uses the L</fetchrow_arrayref> method to fetch each 
+row as an array ref. If the C<$slice> array is not empty then it is used as a slice to select individual 
+columns by perl array index number (starting at 0, unlike column and parameter numbers which start at 1).
+
+With no parameters, or if $slice is undefined, fetchall_arrayref acts as if passed an empty array ref.
+
+If C<$slice> is a hash reference, fetchall_arrayref uses L</fetchrow_hashref> to fetch each row as a hash reference.
+
+See the L<DBI> documentation for a complete discussion.
+
+=head3 B<fetchall_hashref>
+
+    $hash_ref = $sth->fetchall_hashref( $key_field );
+
+Returns a hashref containing all rows to be fetched from the statement handle. See the DBI documentation for 
+a full discussion.
+
+=head3 B<finish>
+
+    $rv = $sth->finish;
+
+Indicates to DBI that you are finished with the statement handle and are not going to use it again. Only needed 
+when you have not fetched all the possible rows.
+
+=head3 B<rows>
+
+    $rv = $sth->rows;
+
+Returns the number of rows returned by the last query. In contrast to many other DBD modules, 
+the number of rows is available immediately after calling C<< $sth->execute >>. Note that 
+the L</execute> method itself returns the number of rows itself, which means that this 
+method is rarely needed.
+
+=head3 B<dump_results>
+
+    $rows = $sth->dump_results($maxlen, $lsep, $fsep, $fh);
+
+Fetches all the rows from the statement handle, calls C<DBI::neat_list> for each row, and 
+prints the results to C<$fh> (which defaults to F<STDOUT>). Rows are separated by C<$lsep> (which defaults 
+to a newline). Columns are separated by C<$fsep> (which defaults to a comma). The C<$maxlen> controls 
+how wide the output can be, and defaults to 35.
+
+This method is designed as a handy utility for prototyping and testing queries. Since it uses 
+"neat_list" to format and edit the string for reading by humans, it is not recommended 
+for data transfer applications.
 
 
 =head1 SUPPORT

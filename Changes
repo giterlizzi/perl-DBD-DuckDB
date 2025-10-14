@@ -1,6 +1,11 @@
 Revision history for Perl extension DBD::DuckDB.
 
-0.12  2925-10-13
+0.13 2025-10-14
+	- Improved "AutoCommit", "$dbh->commit" and "$dbh->rollback"
+	- Added "foreign_key_info" helper
+	- Updated documentations
+
+0.12  2025-10-13
 	- Improved DuckDB appender
 	- Added "primary_key_info" helper
 	- Added all "duckdb_append_*" and "ducldb_bind_*" C functions

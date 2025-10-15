@@ -11,7 +11,6 @@ use DuckDBTest;
 
 my $dbh = connect_ok;
 
-
 SCOPE: {
 
     my $sql = <<'END_SQL';
@@ -29,7 +28,7 @@ END_SQL
 
 TODO: {
 
-        local $TODO = 'Fail in CI';
+        local $TODO = 'Fail in CI' if $ENV{CI};
 
         is $row->{aware1}, '2001-02-17T04:38:40';
         is $row->{naive1}, '2001-02-15T20:38:40';

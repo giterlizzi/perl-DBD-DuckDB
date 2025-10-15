@@ -26,7 +26,7 @@ diag explain $row;
 
 TODO: {
 
-    local $TODO = 'Fail in CI';
+    local $TODO = "$^O doesn't work yet. :(" if $^O eq 'darwin';
 
     is $row->[0]->{v}, 'a';
     is $row->[0]->{i}, 42;

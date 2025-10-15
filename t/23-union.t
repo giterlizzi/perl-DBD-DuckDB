@@ -27,7 +27,7 @@ TODO: {
 
 }
 
-$dbh->do('INSERT INTO tbl1 VALUES (true), (false)');
+ok !$dbh->do('INSERT INTO tbl1 VALUES (true), (false)'), 'Fail insert bool data';
 
 ok $dbh->errstr, 'Failed to insert bool data';
 

@@ -697,32 +697,26 @@ package    # hide from PAUSE
         my $vector_data = duckdb_vector_get_data($vector);
         my $type_id     = duckdb_get_type_id($logical_type);
 
-        return _vector_u8($vector_data, $row_idx) ? \1 : \0 if ($type_id == DUCKDB_TYPE_BOOLEAN);
-        return _vector_i8($vector_data, $row_idx)           if ($type_id == DUCKDB_TYPE_TINYINT);
-        return _vector_i16($vector_data, $row_idx)          if ($type_id == DUCKDB_TYPE_SMALLINT);
-        return _vector_i32($vector_data, $row_idx)          if ($type_id == DUCKDB_TYPE_INTEGER);
-        return _vector_i64($vector_data, $row_idx)          if ($type_id == DUCKDB_TYPE_BIGINT);
-        return _vector_u8($vector_data, $row_idx)           if ($type_id == DUCKDB_TYPE_UTINYINT);
-        return _vector_u16($vector_data, $row_idx)          if ($type_id == DUCKDB_TYPE_USMALLINT);
-        return _vector_u32($vector_data, $row_idx)          if ($type_id == DUCKDB_TYPE_UINTEGER);
-        return _vector_u64($vector_data, $row_idx)          if ($type_id == DUCKDB_TYPE_UBIGINT);
-        return _vector_f32($vector_data, $row_idx)          if ($type_id == DUCKDB_TYPE_FLOAT);
-        return _vector_f64($vector_data, $row_idx)          if ($type_id == DUCKDB_TYPE_DOUBLE);
-
-        return _vector_varchar($vector_data, $row_idx)
-            if ($type_id == DUCKDB_TYPE_VARCHAR || $type_id == DUCKDB_TYPE_BLOB);
-
-        return _vector_date($vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_DATE);
-
-        return _vector_timestamp($vector_data, $row_idx, $type_id)
-            if ($type_id == DUCKDB_TYPE_TIMESTAMP || $type_id == DUCKDB_TYPE_TIMESTAMP_TZ);
-
         return _vector_array($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_ARRAY);
+        return _vector_date($vector_data, $row_idx)                         if ($type_id == DUCKDB_TYPE_DATE);
+        return _vector_f32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_FLOAT);
+        return _vector_f64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_DOUBLE);
+        return _vector_i16($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_SMALLINT);
+        return _vector_i32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_INTEGER);
+        return _vector_i64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_BIGINT);
+        return _vector_i8($vector_data, $row_idx)                           if ($type_id == DUCKDB_TYPE_TINYINT);
         return _vector_list($logical_type, $vector, $vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_LIST);
         return _vector_struct($logical_type, $vector, $row_idx)             if ($type_id == DUCKDB_TYPE_STRUCT);
+        return _vector_timestamp($vector_data, $row_idx, 0)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP);
+        return _vector_timestamp($vector_data, $row_idx, 1)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_TZ);
+        return _vector_u16($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_USMALLINT);
+        return _vector_u32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_UINTEGER);
+        return _vector_u64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_UBIGINT);
+        return _vector_u8($vector_data, $row_idx)                           if ($type_id == DUCKDB_TYPE_UTINYINT);
+        return _vector_u8($vector_data, $row_idx) ? \1 : \0                 if ($type_id == DUCKDB_TYPE_BOOLEAN);
         return _vector_union($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_UNION);
-
-        # TODO DUCKDB_TYPE_MAP
+        return _vector_varchar($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_BLOB);
+        return _vector_varchar($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_VARCHAR);
 
         Carp::carp "Unknown type ($type_id)";
         return undef;
@@ -770,19 +764,22 @@ package    # hide from PAUSE
     }
 
     sub _vector_date {
+
         my ($vector_data, $row_idx) = @_;
 
+        # Decode duckdb_date struct
         my $days  = _vector_i32($vector_data, $row_idx);
         my $epoch = 0 + 86400 * $days;
 
         my $t = Time::Piece->new($epoch);
         return $t->date;
+
     }
 
     sub _vector_timestamp {
-        my ($vector_data, $row_idx, $type_id) = @_;
+        my ($vector_data, $row_idx, $tz) = @_;
         my $epoch = int(_vector_i64($vector_data, $row_idx) / 1_000_000);
-        return ($type_id == DUCKDB_TYPE_TIMESTAMP_TZ) ? localtime($epoch)->datetime : gmtime($epoch)->datetime;
+        return ($tz == 1) ? localtime($epoch)->datetime : gmtime($epoch)->datetime;
     }
 
     sub _vector_array {
@@ -860,18 +857,17 @@ package    # hide from PAUSE
 
     sub _vector_union {
 
-        my ($logical_type, $vector_data, $row_idx) = @_;
+        my $struct = _vector_struct(@_);
 
-        my $type_vector = duckdb_struct_vector_get_child($vector_data, 0);
-        my $data        = duckdb_vector_get_data($type_vector);
-        my $index       = int(_vector_u8($data, $row_idx));
+        return undef unless $struct && ref $struct eq 'HASH';
 
-        my $child_logical_type = duckdb_union_type_member_type($logical_type, $index);
-        my $vector_value       = duckdb_struct_vector_get_child($vector_data, $index + 1);
-        my $value              = _fetch_vector_value($vector_value, $row_idx, $child_logical_type);
+        for my $key (sort keys %{$struct}) {
+            next if $key eq '';
 
-        duckdb_destroy_logical_type(\$child_logical_type);
-        return $value;
+            return $struct->{$key} if defined $struct->{$key};
+        }
+
+        return undef;
 
     }
 

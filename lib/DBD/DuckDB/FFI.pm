@@ -81,6 +81,8 @@ our @EXPORT_OK = qw(
     duckdb_free
     duckdb_get_type_id
     duckdb_library_version
+    duckdb_list_type_child_type
+    duckdb_list_vector_get_child
     duckdb_list_vector_get_child
     duckdb_open
     duckdb_prepare
@@ -134,22 +136,22 @@ sub init {
     $ffi->type('record(DBD::DuckDB::FFI::uHugeInt)' => 'duckdb_uhugeint');
 
     # Open Connect
-    $ffi->attach(duckdb_connect         => ['duckdb_database', 'duckdb_connection*'] => 'duckdb_state');
-    $ffi->attach(duckdb_open            => ['string', 'duckdb_database*']            => 'duckdb_state');
     $ffi->attach(duckdb_close           => ['duckdb_database*']                      => 'void');
+    $ffi->attach(duckdb_connect         => ['duckdb_database', 'duckdb_connection*'] => 'duckdb_state');
     $ffi->attach(duckdb_disconnect      => ['duckdb_connection*']                    => 'void');
     $ffi->attach(duckdb_library_version => []                                        => 'string');
+    $ffi->attach(duckdb_open            => ['string', 'duckdb_database*']            => 'duckdb_state');
 
     # Query Execution
+    $ffi->attach(duckdb_column_count        => ['duckdb_result*']          => 'idx_t');
+    $ffi->attach(duckdb_column_logical_type => ['duckdb_result*', 'idx_t'] => 'duckdb_logical_type');
+    $ffi->attach(duckdb_column_name         => ['duckdb_result*', 'idx_t'] => 'string');
+    $ffi->attach(duckdb_column_type         => ['duckdb_result*', 'idx_t'] => 'duckdb_type');
+    $ffi->attach(duckdb_destroy_result      => ['duckdb_result*']          => 'void');
     $ffi->attach(duckdb_query               => ['duckdb_connection', 'string', 'duckdb_result*'] => 'duckdb_state');
-    $ffi->attach(duckdb_destroy_result      => ['duckdb_result*']                                => 'void');
     $ffi->attach(duckdb_result_error        => ['duckdb_result*']                                => 'string');
     $ffi->attach(duckdb_row_count           => ['duckdb_result*']                                => 'idx_t');
     $ffi->attach(duckdb_rows_changed        => ['duckdb_result*']                                => 'idx_t');
-    $ffi->attach(duckdb_column_count        => ['duckdb_result*']                                => 'idx_t');
-    $ffi->attach(duckdb_column_name         => ['duckdb_result*', 'idx_t']                       => 'string');
-    $ffi->attach(duckdb_column_type         => ['duckdb_result*', 'idx_t']                       => 'duckdb_type');
-    $ffi->attach(duckdb_column_logical_type => ['duckdb_result*', 'idx_t'] => 'duckdb_logical_type');
 
     # Prepared Statements
     $ffi->attach(duckdb_prepare => ['duckdb_connection', 'string', 'duckdb_prepared_statement*'] => 'duckdb_state');
@@ -195,29 +197,30 @@ sub init {
     $ffi->attach(duckdb_validity_row_is_valid => ['uint64_t', 'idx_t'] => 'bool');
 
     # Logical Type Interface
-    $ffi->attach(duckdb_struct_type_child_type  => ['duckdb_logical_type', 'idx_t'] => 'duckdb_logical_type');
-    $ffi->attach(duckdb_destroy_logical_type    => ['duckdb_logical_type*']         => 'void');
-    $ffi->attach(duckdb_union_type_member_count => ['duckdb_logical_type']          => 'idx_t');
-    $ffi->attach(duckdb_union_type_member_type  => ['duckdb_logical_type', 'idx_t'] => 'duckdb_logical_type');
-    $ffi->attach(duckdb_struct_type_child_name  => ['duckdb_logical_type', 'idx_t'] => 'string');
-    $ffi->attach(duckdb_struct_type_child_count => ['duckdb_logical_type']          => 'idx_t');
     $ffi->attach(duckdb_array_type_array_size   => ['duckdb_logical_type']          => 'idx_t');
     $ffi->attach(duckdb_array_type_child_type   => ['duckdb_logical_type']          => 'duckdb_logical_type');
+    $ffi->attach(duckdb_destroy_logical_type    => ['duckdb_logical_type*']         => 'void');
     $ffi->attach(duckdb_get_type_id             => ['duckdb_logical_type']          => 'duckdb_type');
+    $ffi->attach(duckdb_list_type_child_type    => ['duckdb_logical_type', 'idx_t'] => 'duckdb_logical_type');
+    $ffi->attach(duckdb_struct_type_child_count => ['duckdb_logical_type']          => 'idx_t');
+    $ffi->attach(duckdb_struct_type_child_name  => ['duckdb_logical_type', 'idx_t'] => 'string');
+    $ffi->attach(duckdb_struct_type_child_type  => ['duckdb_logical_type', 'idx_t'] => 'duckdb_logical_type');
+    $ffi->attach(duckdb_union_type_member_count => ['duckdb_logical_type']          => 'idx_t');
+    $ffi->attach(duckdb_union_type_member_type  => ['duckdb_logical_type', 'idx_t'] => 'duckdb_logical_type');
 
     # Data Chunk Interface
-    $ffi->attach(duckdb_destroy_data_chunk    => ['duckdb_data_chunk*']         => 'void');
-    $ffi->attach(duckdb_data_chunk_get_vector => ['duckdb_data_chunk', 'idx_t'] => 'opaque');
     $ffi->attach(duckdb_data_chunk_get_size   => ['duckdb_data_chunk']          => 'idx_t');
-
+    $ffi->attach(duckdb_data_chunk_get_vector => ['duckdb_data_chunk', 'idx_t'] => 'opaque');
+    $ffi->attach(duckdb_destroy_data_chunk    => ['duckdb_data_chunk*']         => 'void');
 
     # Vector Interface
-    $ffi->attach(duckdb_vector_get_column_type  => ['duckdb_vector'] => 'duckdb_logical_type');
-    $ffi->attach(duckdb_struct_vector_get_child => ['duckdb_vector'] => 'duckdb_vector');
     $ffi->attach(duckdb_array_vector_get_child  => ['duckdb_vector'] => 'duckdb_vector');
     $ffi->attach(duckdb_list_vector_get_child   => ['duckdb_vector'] => 'duckdb_vector');
-    $ffi->attach(duckdb_vector_get_validity     => ['duckdb_vector'] => 'uint64_t');
+    $ffi->attach(duckdb_list_vector_get_child   => ['duckdb_vector'] => 'duckdb_vector');
+    $ffi->attach(duckdb_struct_vector_get_child => ['duckdb_vector'] => 'duckdb_vector');
+    $ffi->attach(duckdb_vector_get_column_type  => ['duckdb_vector'] => 'duckdb_logical_type');
     $ffi->attach(duckdb_vector_get_data         => ['duckdb_vector'] => 'opaque');
+    $ffi->attach(duckdb_vector_get_validity     => ['duckdb_vector'] => 'uint64_t');
 
     # Appender
     $ffi->attach(duckdb_append_blob        => ['duckdb_appender', 'opaque', 'idx_t'] => 'duckdb_state');

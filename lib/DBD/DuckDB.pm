@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.13';
+    our $VERSION = '0.13_1';
     $VERSION =~ tr/_//d;
 
     our $drh;
@@ -717,11 +717,10 @@ package    # hide from PAUSE
         return _vector_timestamp($vector_data, $row_idx, $type_id)
             if ($type_id == DUCKDB_TYPE_TIMESTAMP || $type_id == DUCKDB_TYPE_TIMESTAMP_TZ);
 
-        return _vector_array($logical_type, $vector, $row_idx)
-            if ($type_id == DUCKDB_TYPE_ARRAY || $type_id == DUCKDB_TYPE_LIST);
-
-        return _vector_struct($logical_type, $vector, $row_idx) if ($type_id == DUCKDB_TYPE_STRUCT);
-        return _vector_union($logical_type, $vector, $row_idx)  if ($type_id == DUCKDB_TYPE_UNION);
+        return _vector_array($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_ARRAY);
+        return _vector_list($logical_type, $vector, $vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_LIST);
+        return _vector_struct($logical_type, $vector, $row_idx)             if ($type_id == DUCKDB_TYPE_STRUCT);
+        return _vector_union($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_UNION);
 
         # TODO DUCKDB_TYPE_MAP
 
@@ -809,6 +808,31 @@ package    # hide from PAUSE
 
     }
 
+    sub _vector_list {
+
+        my ($logical_type, $vector, $vector_data, $row_idx) = @_;
+
+        my $child_logical_type = duckdb_list_type_child_type($logical_type);
+        my $child_vector       = duckdb_list_vector_get_child($vector);
+
+        # Decode duckdb_list_entry struct
+        my ($offset, $length) = unpack('Q< Q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
+
+        my $begin = $offset;
+        my $end   = $offset + $length;
+
+        my @out = ();
+
+        for (my $i = $begin; $i < $end; $i++) {
+            push @out, _fetch_vector_value($child_vector, $i, $child_logical_type);
+        }
+
+        duckdb_destroy_logical_type(\$child_logical_type);
+
+        return \@out;
+
+    }
+
     sub _vector_struct {
 
         my ($logical_type, $vector_data, $row_idx) = @_;
@@ -864,8 +888,6 @@ package    # hide from PAUSE
         }
 
         my @row = ();
-
-        use Data::Dumper;
 
         if (!defined $sth->{duckdb_chunk}) {
 

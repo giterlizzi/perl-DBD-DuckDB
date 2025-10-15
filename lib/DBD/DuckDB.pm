@@ -996,10 +996,10 @@ or add the directory to C</etc/ld.so.conf> and run:
 
 =back
 
-=head2 Use L<Alien::DuckDB>
+=head2 Use Alien::DuckDB
 
-L<Alien::DuckDB> is a CPAN module that automatically downloads,
-builds, and installs the native DuckDB library for the current platform.
+L<Alien::DuckDB> is a CPAN module that automatically downloads and
+installs the native DuckDB C library for the current platform.
 
 =over
 
@@ -1015,7 +1015,7 @@ builds, and installs the native DuckDB library for the current platform.
 
 No environment variables or manual copying of *.so files are needed;
 when you C<use DBD::DuckDB>, the module calls
-C<Alien::DuckDB->dynamic_lib> to obtain the correct library path.
+C<Alien::DuckDB-E<gt>dynamic_lib> to obtain the correct library path.
 
 =back
 

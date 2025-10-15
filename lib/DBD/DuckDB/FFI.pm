@@ -83,7 +83,6 @@ our @EXPORT_OK = qw(
     duckdb_library_version
     duckdb_list_type_child_type
     duckdb_list_vector_get_child
-    duckdb_list_vector_get_child
     duckdb_open
     duckdb_prepare
     duckdb_prepare_error
@@ -215,7 +214,6 @@ sub init {
 
     # Vector Interface
     $ffi->attach(duckdb_array_vector_get_child  => ['duckdb_vector'] => 'duckdb_vector');
-    $ffi->attach(duckdb_list_vector_get_child   => ['duckdb_vector'] => 'duckdb_vector');
     $ffi->attach(duckdb_list_vector_get_child   => ['duckdb_vector'] => 'duckdb_vector');
     $ffi->attach(duckdb_struct_vector_get_child => ['duckdb_vector'] => 'duckdb_vector');
     $ffi->attach(duckdb_vector_get_column_type  => ['duckdb_vector'] => 'duckdb_logical_type');

@@ -71,6 +71,9 @@ our @EXPORT_OK = qw(
     duckdb_connect
     duckdb_data_chunk_get_size
     duckdb_data_chunk_get_vector
+    duckdb_decimal_internal_type
+    duckdb_decimal_scale
+    duckdb_decimal_width
     duckdb_destroy_data_chunk
     duckdb_destroy_logical_type
     duckdb_destroy_prepare
@@ -83,6 +86,8 @@ our @EXPORT_OK = qw(
     duckdb_library_version
     duckdb_list_type_child_type
     duckdb_list_vector_get_child
+    duckdb_map_type_key_type
+    duckdb_map_type_value_type
     duckdb_open
     duckdb_prepare
     duckdb_prepare_error
@@ -198,9 +203,14 @@ sub init {
     # Logical Type Interface
     $ffi->attach(duckdb_array_type_array_size   => ['duckdb_logical_type']          => 'idx_t');
     $ffi->attach(duckdb_array_type_child_type   => ['duckdb_logical_type']          => 'duckdb_logical_type');
+    $ffi->attach(duckdb_decimal_internal_type   => ['duckdb_logical_type']          => 'duckdb_type');
+    $ffi->attach(duckdb_decimal_scale           => ['duckdb_logical_type']          => 'uint8_t');
+    $ffi->attach(duckdb_decimal_width           => ['duckdb_logical_type']          => 'uint8_t');
     $ffi->attach(duckdb_destroy_logical_type    => ['duckdb_logical_type*']         => 'void');
     $ffi->attach(duckdb_get_type_id             => ['duckdb_logical_type']          => 'duckdb_type');
     $ffi->attach(duckdb_list_type_child_type    => ['duckdb_logical_type', 'idx_t'] => 'duckdb_logical_type');
+    $ffi->attach(duckdb_map_type_key_type       => ['duckdb_logical_type']          => 'duckdb_logical_type');
+    $ffi->attach(duckdb_map_type_value_type     => ['duckdb_logical_type']          => 'duckdb_logical_type');
     $ffi->attach(duckdb_struct_type_child_count => ['duckdb_logical_type']          => 'idx_t');
     $ffi->attach(duckdb_struct_type_child_name  => ['duckdb_logical_type', 'idx_t'] => 'string');
     $ffi->attach(duckdb_struct_type_child_type  => ['duckdb_logical_type', 'idx_t'] => 'duckdb_logical_type');
@@ -213,12 +223,12 @@ sub init {
     $ffi->attach(duckdb_destroy_data_chunk    => ['duckdb_data_chunk*']         => 'void');
 
     # Vector Interface
-    $ffi->attach(duckdb_array_vector_get_child  => ['duckdb_vector'] => 'duckdb_vector');
-    $ffi->attach(duckdb_list_vector_get_child   => ['duckdb_vector'] => 'duckdb_vector');
-    $ffi->attach(duckdb_struct_vector_get_child => ['duckdb_vector'] => 'duckdb_vector');
-    $ffi->attach(duckdb_vector_get_column_type  => ['duckdb_vector'] => 'duckdb_logical_type');
-    $ffi->attach(duckdb_vector_get_data         => ['duckdb_vector'] => 'opaque');
-    $ffi->attach(duckdb_vector_get_validity     => ['duckdb_vector'] => 'uint64_t');
+    $ffi->attach(duckdb_array_vector_get_child  => ['duckdb_vector']          => 'duckdb_vector');
+    $ffi->attach(duckdb_list_vector_get_child   => ['duckdb_vector']          => 'duckdb_vector');
+    $ffi->attach(duckdb_struct_vector_get_child => ['duckdb_vector', 'idx_t'] => 'duckdb_vector');
+    $ffi->attach(duckdb_vector_get_column_type  => ['duckdb_vector']          => 'duckdb_logical_type');
+    $ffi->attach(duckdb_vector_get_data         => ['duckdb_vector']          => 'opaque');
+    $ffi->attach(duckdb_vector_get_validity     => ['duckdb_vector']          => 'uint64_t');
 
     # Appender
     $ffi->attach(duckdb_append_blob        => ['duckdb_appender', 'opaque', 'idx_t'] => 'duckdb_state');
@@ -536,7 +546,17 @@ L<DBD::DuckDB> use L<FFI::Platypus> for access to C<libduckdb> C library.
 
 =item duckdb_get_type_id
 
+=item duckdb_decimal_internal_type
+
+=item duckdb_decimal_scale
+
+=item duckdb_decimal_width
+
 =item duckdb_list_type_child_type
+
+=item duckdb_map_type_key_type
+
+=item duckdb_map_type_value_type
 
 =item duckdb_struct_type_child_count
 

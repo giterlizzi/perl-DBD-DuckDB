@@ -3,6 +3,9 @@ Revision history for Perl extension DBD::DuckDB.
 0.?? 2025-10-??
 	- Improved support for LIST
 	- Improved support for UNION
+	- Improved support for MAP
+	- Improved support for DECIMAL
+	- Added new tests
 	- Added examples directory
 
 0.13 2025-10-14

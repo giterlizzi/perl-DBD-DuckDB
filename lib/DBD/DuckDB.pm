@@ -699,6 +699,7 @@ package    # hide from PAUSE
 
         return _vector_array($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_ARRAY);
         return _vector_date($vector_data, $row_idx)                         if ($type_id == DUCKDB_TYPE_DATE);
+        return _vector_decimal($logical_type, $vector_data, $row_idx)       if ($type_id == DUCKDB_TYPE_DECIMAL);
         return _vector_f32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_FLOAT);
         return _vector_f64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_DOUBLE);
         return _vector_i16($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_SMALLINT);
@@ -706,6 +707,7 @@ package    # hide from PAUSE
         return _vector_i64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_BIGINT);
         return _vector_i8($vector_data, $row_idx)                           if ($type_id == DUCKDB_TYPE_TINYINT);
         return _vector_list($logical_type, $vector, $vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_LIST);
+        return _vector_map($logical_type, $vector, $vector_data, $row_idx)  if ($type_id == DUCKDB_TYPE_MAP);
         return _vector_struct($logical_type, $vector, $row_idx)             if ($type_id == DUCKDB_TYPE_STRUCT);
         return _vector_timestamp($vector_data, $row_idx, 0)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP);
         return _vector_timestamp($vector_data, $row_idx, 1)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_TZ);
@@ -867,6 +869,65 @@ package    # hide from PAUSE
             return $struct->{$key} if defined $struct->{$key};
         }
 
+        return undef;
+
+    }
+
+    sub _vector_map {
+
+        my ($logical_type, $vector, $vector_data, $row_idx) = @_;
+
+        my $key_logical_type   = duckdb_map_type_key_type($logical_type);
+        my $value_logical_type = duckdb_map_type_value_type($logical_type);
+
+        # Decode duckdb_list_entry struct
+        my ($offset, $length) = unpack('Q< Q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
+
+        my $begin = $offset;
+        my $end   = $offset + $length;
+
+        my %out = ();
+
+        my $child        = duckdb_list_vector_get_child($vector);
+        my $key_vector   = duckdb_struct_vector_get_child($child, 0);
+        my $value_vector = duckdb_struct_vector_get_child($child, 1);
+
+        for (my $i = $begin; $i < $end; ++$i) {
+
+            my $key   = _fetch_vector_value($key_vector,   $i, $key_logical_type);
+            my $value = _fetch_vector_value($value_vector, $i, $value_logical_type);
+
+            $out{$key} = $value;
+
+        }
+
+        duckdb_destroy_logical_type(\$key_logical_type);
+        duckdb_destroy_logical_type(\$value_logical_type);
+
+        return \%out;
+
+    }
+
+    sub _vector_decimal {
+
+        my ($logical_type, $vector_data, $row_idx) = @_;
+
+        my $width = duckdb_decimal_width($logical_type);
+        my $scale = duckdb_decimal_scale($logical_type);
+        my $type  = duckdb_decimal_internal_type($logical_type);
+        my $value = undef;
+
+        $value = _vector_i32($vector_data, $row_idx) if ($type == DUCKDB_TYPE_INTEGER);
+        $value = _vector_i16($vector_data, $row_idx) if ($type == DUCKDB_TYPE_SMALLINT);
+        $value = _vector_i64($vector_data, $row_idx) if ($type == DUCKDB_TYPE_BIGINT);
+
+        # TODO Add other numeric types
+
+        if ($value) {
+            return sprintf("%.${scale}f", $value / (10**$scale));
+        }
+
+        Carp::carp "Unknown decimal internal type ($type)";
         return undef;
 
     }

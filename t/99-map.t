@@ -23,7 +23,7 @@ my @TESTS = (
 
     # Map NULL (/test/sql/types/map/map_null.test)
     ["select map(NULL::INT[], [1,2,3]) AS m", undef], ["select map(NULL, [1,2,3]) AS m",         undef],
-    ["select map(NULL, NULL) AS m",           undef], ["select map(NULL, [1,2,3]) IS NULL AS m", \1],
+    ["select map(NULL, NULL) AS m",           undef], ["select map(NULL, [1,2,3]) IS NULL AS m", !!1],
     ["select map([1,2,3], NULL) AS m",        undef], ["select map([1,2,3], NULL::INT[]) AS m",  undef],
 );
 

@@ -18,6 +18,7 @@ t/12-metadata.t
 t/13-transaction.t
 t/14-foreign-key-info.t
 t/99-array.t
+t/99-map.t
 t/99-struct.t
 t/99-timestamp.t
 t/99-union.t

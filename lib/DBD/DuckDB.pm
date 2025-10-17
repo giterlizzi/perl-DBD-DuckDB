@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.13_1';
+    our $VERSION = '0.14';
     $VERSION =~ tr/_//d;
 
     our $drh;
@@ -24,6 +24,10 @@ package DBD::DuckDB {
 
             DBD::DuckDB::db->install_method('x_duckdb_appender');
             DBD::DuckDB::db->install_method('x_duckdb_version');
+
+            DBD::DuckDB::db->install_method('x_duckdb_read_csv');
+            DBD::DuckDB::db->install_method('x_duckdb_read_json');
+            DBD::DuckDB::db->install_method('x_duckdb_read_xlsx');
 
             $methods_are_installed++;
 
@@ -152,6 +156,144 @@ package    # hide from PAUSE
         $schema //= 'main';
 
         return DBD::DuckDB::Appender->new(schema => $schema, table => $table, dbh => $dbh);
+
+    }
+
+    sub x_duckdb_read_json {
+
+        my ($dbh, $file, $params) = @_;
+
+        # read_json(VARCHAR,
+        #     convert_strings_to_integers : BOOLEAN,
+        #     maximum_sample_files : BIGINT,
+        #     timestamp_format : VARCHAR,
+        #     field_appearance_threshold : DOUBLE,
+        #     timestampformat : VARCHAR,
+        #     map_inference_threshold : BIGINT,
+        #     date_format : VARCHAR,
+        #     filename : ANY,
+        #     union_by_name : BOOLEAN,
+        #     compression : VARCHAR,
+        #     maximum_depth : BIGINT,
+        #     columns : ANY,
+        #     sample_size : BIGINT,
+        #     hive_types : ANY,
+        #     hive_types_autocast : BOOLEAN,
+        #     maximum_object_size : UINTEGER,
+        #     format : VARCHAR,
+        #     ignore_errors : BOOLEAN,
+        #     hive_partitioning : BOOLEAN,
+        #     auto_detect : BOOLEAN,
+        #     records : VARCHAR,
+        #     dateformat : VARCHAR
+        # )
+
+        my @placeholders = map {"$_ = ?"} sort keys %$params;
+        my @bind         = map { $params->{$_} } sort keys %$params;
+
+        unshift @bind,         $file;
+        unshift @placeholders, '?';
+
+        my $sql = sprintf 'SELECT * FROM read_json(%s)', join(', ', @placeholders);
+
+        my $sth = $dbh->prepare($sql) or return;
+        $sth->execute(@bind)          or return;
+        return $sth;
+
+    }
+
+    sub x_duckdb_read_csv {
+
+        my ($dbh, $file, $params) = @_;
+
+        # read_csv(VARCHAR
+        #     thousands : VARCHAR
+        #     strict_mode : BOOLEAN
+        #     dtypes : ANY
+        #     column_types : ANY
+        #     null_padding : BOOLEAN
+        #     column_names : VARCHAR[]
+        #     buffer_size : UBIGINT
+        #     parallel : BOOLEAN
+        #     force_not_null : VARCHAR[]
+        #     hive_types : ANY
+        #     new_line : VARCHAR
+        #     files_to_sniff : BIGINT
+        #     dateformat : VARCHAR
+        #     delim : VARCHAR
+        #     sep : VARCHAR
+        #     decimal_separator : VARCHAR
+        #     nullstr : ANY
+        #     escape : VARCHAR
+        #     compression : VARCHAR
+        #     encoding : VARCHAR
+        #     hive_types_autocast : BOOLEAN
+        #     all_varchar : BOOLEAN
+        #     columns : ANY
+        #     hive_partitioning : BOOLEAN
+        #     auto_detect : BOOLEAN
+        #     comment : VARCHAR
+        #     quote : VARCHAR
+        #     max_line_size : VARCHAR
+        #     store_rejects : BOOLEAN
+        #     union_by_name : BOOLEAN
+        #     header : BOOLEAN
+        #     types : ANY
+        #     skip : BIGINT
+        #     filename : ANY
+        #     sample_size : BIGINT
+        #     timestampformat : VARCHAR
+        #     normalize_names : BOOLEAN
+        #     ignore_errors : BOOLEAN
+        #     names : VARCHAR[]
+        #     allow_quoted_nulls : BOOLEAN
+        #     maximum_line_size : VARCHAR
+        #     rejects_table : VARCHAR
+        #     auto_type_candidates : ANY
+        #     rejects_scan : VARCHAR
+        #     rejects_limit : BIGINT
+        # )
+
+        my @placeholders = map {"$_ = ?"} sort keys %$params;
+        my @bind         = map { $params->{$_} } sort keys %$params;
+
+        unshift @bind,         $file;
+        unshift @placeholders, '?';
+
+        my $sql = sprintf 'SELECT * FROM read_csv(%s)', join(', ', @placeholders);
+
+        my $sth = $dbh->prepare($sql) or return;
+        $sth->execute(@bind)          or return;
+        return $sth;
+
+    }
+
+    sub x_duckdb_read_xlsx {
+
+        my ($dbh, $file, $params) = @_;
+
+        # read_xlsx(VARCHAR
+        #     normalize_names : BOOLEAN
+        #     empty_as_varchar : BOOLEAN
+        #     stop_at_empty : BOOLEAN
+        #     sheet : VARCHAR
+        #     range : VARCHAR
+        #     ignore_errors : BOOLEAN
+        #     all_varchar : BOOLEAN
+        #     header : BOOLEAN
+        # )
+
+        my @placeholders = map {"$_ = ?"} sort keys %$params;
+        my @bind         = map { $params->{$_} } sort keys %$params;
+
+        unshift @bind,         $file;
+        unshift @placeholders, '?';
+
+        my $sql = sprintf 'SELECT * FROM read_xlsx(%s)', join(', ', @placeholders);
+
+        my $sth = $dbh->prepare($sql) or return;
+        $sth->execute(@bind)          or return;
+        return $sth;
 
     }
 
@@ -715,7 +857,7 @@ package    # hide from PAUSE
         return _vector_u32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_UINTEGER);
         return _vector_u64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_UBIGINT);
         return _vector_u8($vector_data, $row_idx)                           if ($type_id == DUCKDB_TYPE_UTINYINT);
-        return _vector_u8($vector_data, $row_idx) ? \1 : \0                 if ($type_id == DUCKDB_TYPE_BOOLEAN);
+        return _vector_u8($vector_data, $row_idx) ? !!1 : !!0               if ($type_id == DUCKDB_TYPE_BOOLEAN);
         return _vector_union($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_UNION);
         return _vector_varchar($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_BLOB);
         return _vector_varchar($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_VARCHAR);
@@ -978,7 +1120,7 @@ package    # hide from PAUSE
         if ($sth->{duckdb_chunk_row} >= $sth->{duckdb_chunk_size}) {
             my $tmp = $sth->{chunk};
             duckdb_destroy_data_chunk(\$tmp);
-            $sth->{chunk} = undef;
+            $sth->{duckdb_chunk} = undef;
         }
 
         map {s/\s+$//} @row if $sth->FETCH('ChopBlanks');
@@ -1415,6 +1557,38 @@ much faster than using prepared statements or individual INSERT INTO statements.
 
 See L<DBD::DuckDB::Appender>.
 
+=head3 B<x_duckdb_read_csv>
+
+    $dbh->x_duckdb_read_csv( $file );
+    $dbh->x_duckdb_read_csv( $file, \%params );
+
+Helper method for C<read_csv> function (L<https://duckdb.org/docs/stable/data/csv/overview>).
+
+    $sth = $dbh->x_duckdb_read_csv('https://duckdb.org/data/flights.csv' => {sep => '|'}) or Carp::croak $dbh->errstr;
+
+    while (my $row = $sth->fetchrow_hashref) {
+        say sprintf '%s --> %s', $row->{OriginCityName}, $row->{DestCityName}; 
+    }
+
+=head3 B<x_duckdb_read_json>
+
+    $dbh->x_duckdb_read_json( $file );
+    $dbh->x_duckdb_read_json( $file, \%params );
+
+Helper method for C<read_json> function (L<https://duckdb.org/docs/stable/data/json/loading_json>).
+
+    $sth = $dbh->x_duckdb_read_json('https://duckdb.org/data/json/todos.json') or Carp::croak $dbh->errstr;
+
+    while (my $row = $sth->fetchrow_hashref) {
+        say sprintf '[%s] %s', ($row->{completed} ? '✓' : ' '), $row->{title};
+    }
+
+=head3 B<x_duckdb_read_xlsx>
+
+    $dbh->x_duckdb_read_xlsx( $file );
+    $dbh->x_duckdb_read_xlsx( $file, \%params );
+
+Helper method for C<read_xlsx> function (L<https://duckdb.org/docs/stable/core_extensions/excel>).
 
 
 =head1 DBI STATEMENT HANDLE OBJECTS

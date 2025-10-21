@@ -69,11 +69,13 @@ our @EXPORT_OK = qw(
     duckdb_column_name
     duckdb_column_type
     duckdb_connect
+    duckdb_create_config
     duckdb_data_chunk_get_size
     duckdb_data_chunk_get_vector
     duckdb_decimal_internal_type
     duckdb_decimal_scale
     duckdb_decimal_width
+    duckdb_destroy_config
     duckdb_destroy_data_chunk
     duckdb_destroy_logical_type
     duckdb_destroy_prepare
@@ -89,6 +91,7 @@ our @EXPORT_OK = qw(
     duckdb_map_type_key_type
     duckdb_map_type_value_type
     duckdb_open
+    duckdb_open_ext
     duckdb_prepare
     duckdb_prepare_error
     duckdb_query
@@ -96,6 +99,7 @@ our @EXPORT_OK = qw(
     duckdb_result_return_type
     duckdb_row_count
     duckdb_rows_changed
+    duckdb_set_config
     duckdb_struct_type_child_count
     duckdb_struct_type_child_name
     duckdb_struct_type_child_type
@@ -122,6 +126,7 @@ sub init {
     $ffi->type(int64_t => 'duckdb_time');
     $ffi->type(int64_t => 'duckdb_timestamp');
     $ffi->type(opaque  => 'duckdb_appender');
+    $ffi->type(opaque  => 'duckdb_config');
     $ffi->type(opaque  => 'duckdb_connection');
     $ffi->type(opaque  => 'duckdb_data_chunk');
     $ffi->type(opaque  => 'duckdb_database');
@@ -140,11 +145,17 @@ sub init {
     $ffi->type('record(DBD::DuckDB::FFI::uHugeInt)' => 'duckdb_uhugeint');
 
     # Open Connect
-    $ffi->attach(duckdb_close           => ['duckdb_database*']                      => 'void');
-    $ffi->attach(duckdb_connect         => ['duckdb_database', 'duckdb_connection*'] => 'duckdb_state');
-    $ffi->attach(duckdb_disconnect      => ['duckdb_connection*']                    => 'void');
-    $ffi->attach(duckdb_library_version => []                                        => 'string');
-    $ffi->attach(duckdb_open            => ['string', 'duckdb_database*']            => 'duckdb_state');
+    $ffi->attach(duckdb_close           => ['duckdb_database*']                                => 'void');
+    $ffi->attach(duckdb_connect         => ['duckdb_database', 'duckdb_connection*']           => 'duckdb_state');
+    $ffi->attach(duckdb_disconnect      => ['duckdb_connection*']                              => 'void');
+    $ffi->attach(duckdb_library_version => []                                                  => 'string');
+    $ffi->attach(duckdb_open            => ['string', 'duckdb_database*']                      => 'duckdb_state');
+    $ffi->attach(duckdb_open_ext => ['string', 'duckdb_database*', 'duckdb_config', 'string*'] => 'duckdb_state');
+
+    # Configuration
+    $ffi->attach(duckdb_create_config  => ['duckdb_config*']                    => 'duckdb_state');
+    $ffi->attach(duckdb_destroy_config => ['duckdb_config*']                    => 'void');
+    $ffi->attach(duckdb_set_config     => ['duckdb_config', 'string', 'string'] => 'duckdb_state');
 
     # Query Execution
     $ffi->attach(duckdb_column_count        => ['duckdb_result*']          => 'idx_t');
@@ -409,6 +420,20 @@ L<DBD::DuckDB> use L<FFI::Platypus> for access to C<libduckdb> C library.
 =item duckdb_library_version
 
 =item duckdb_open
+
+=item duckdb_open_ext
+
+=back
+
+=head2 Configuration
+
+=over
+
+=item duckdb_create_config
+
+=item duckdb_destroy_config
+
+=item duckdb_set_config
 
 =back
 

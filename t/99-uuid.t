@@ -10,10 +10,10 @@ use DuckDBTest;
 my $dbh = connect_ok;
 
 my $uuid_invalid = 'invalid-uuid-string-1234-1234567890ab';
-my $uuid_null = '00000000-0000-0000-0000-000000000000';
-my $uuid_v1 = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
-my $uuid_v4 = '4ac7a9e9-607c-4c8a-84f3-843f0191e3fd';
-my $uuid_v7 = '81964ebe-00b1-7e1d-b0f9-43c29b6fb8f5';
+my $uuid_null    = '00000000-0000-0000-0000-000000000000';
+my $uuid_v1      = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+my $uuid_v4      = '4ac7a9e9-607c-4c8a-84f3-843f0191e3fd';
+my $uuid_v7      = '81964ebe-00b1-7e1d-b0f9-43c29b6fb8f5';
 
 SCOPE: {
 

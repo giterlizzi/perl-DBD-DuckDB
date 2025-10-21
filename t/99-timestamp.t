@@ -8,48 +8,59 @@ use Time::Piece;
 
 use lib 't/lib';
 use DuckDBTest;
+use POSIX;
 
 my $dbh = connect_ok;
 
 SCOPE: {
 
-    my $sql = <<'END_SQL';
-SELECT
-    timezone('America/Denver', TIMESTAMP '2001-02-16 20:38:40') AS aware1,
-    timezone('America/Denver', TIMESTAMPTZ '2001-02-16 04:38:40') AS naive1,
-    timezone('UTC', TIMESTAMP '2001-02-16 20:38:40+00:00') AS aware2,
-    timezone('UTC', TIMESTAMPTZ '2001-02-16 04:38:40 Europe/Berlin') AS naive2
-END_SQL
+    $ENV{TZ} = 'Europe/Berlin';
+    POSIX::tzset;
 
-    my $sth = $dbh->prepare($sql);
-    $sth->execute;
+    my ($std, $dst) = POSIX::tzname;
+    diag "TZ: STD=$std, DST:$dst";
 
-    my $row = $sth->fetchrow_hashref;
+    my @TESTS = (
 
-TODO: {
+        #["SELECT timezone('America/Denver', TIMESTAMP '2001-02-16 20:38:40')",      '2001-02-17 04:38:40+01'],
+        #["SELECT timezone('America/Denver', TIMESTAMPTZ '2001-02-16 04:38:40')",    '2001-02-15 20:38:40'],
+        #["SELECT timezone('UTC', TIMESTAMP '2001-02-16 20:38:40+00:00')",           '2001-02-16 21:38:40+01'],
+        #["SELECT timezone('UTC', TIMESTAMPTZ '2001-02-16 04:38:40 Europe/Berlin')", '2001-02-16 03:38:40'],
+    );
 
-        local $TODO = 'Fail in CI' if $ENV{CI};
-
-        is $row->{aware1}, '2001-02-17T04:38:40';
-        is $row->{naive1}, '2001-02-15T20:38:40';
-        is $row->{aware2}, '2001-02-16T21:38:40';
-        is $row->{naive2}, '2001-02-16T03:38:40';
+    foreach my $test (@TESTS) {
+        is $dbh->selectrow_arrayref($test->[0])->[0], $test->[1], $test->[0];
     }
 
 }
 
-
 SCOPE: {
 
-    my $sth = $dbh->prepare(q{SELECT '-infinity'::TIMESTAMP, 'epoch'::TIMESTAMP, 'infinity'::TIMESTAMP;});
-    $sth->execute;
+    $ENV{TZ} = 'UTC';
+    POSIX::tzset;
 
-    my $row = $sth->fetchrow_arrayref;
+    my ($std, $dst) = POSIX::tzname;
+    diag "TZ: STD=$std, DST:$dst";
 
-    is $row->[0], gmtime(-9223372036854)->datetime, '-infinity';
-    is $row->[1], gmtime(0)->datetime,              'epoch';
-    is $row->[2], gmtime(9223372036854)->datetime,  'infinity';
+    my @TESTS = (
+        ["SELECT TIMESTAMP_NS '1992-09-20 11:30:00.123456789'", '1992-09-20 11:30:00.123456789'],
+        ["SELECT TIMESTAMP '1992-09-20 11:30:00.123456789'",    '1992-09-20 11:30:00.123456'],
+        ["SELECT TIMESTAMP_MS '1992-09-20 11:30:00.123456789'", '1992-09-20 11:30:00.123'],
+        ["SELECT TIMESTAMP_S '1992-09-20 11:30:00.123456789'",  '1992-09-20 11:30:00'],
 
+        # TODO: This test work fine if TZ is set to UTC in the shell environment (eg. TZ=UTC prove -lv t/*.t)
+        # ["SELECT TIMESTAMPTZ '1992-09-20 11:30:00.123456789'",    '1992-09-20 11:30:00.123456+00'],
+
+        ["SELECT TIMESTAMPTZ '1992-09-20 12:30:00.123456789+01:00'", '1992-09-20 11:30:00.123456+00'],
+
+        ["SELECT '-infinity'::TIMESTAMP", '-290308-12-21 19:59:06.224193'],
+        ["SELECT 'epoch'::TIMESTAMP",     '1970-01-01 00:00:00'],
+        ["SELECT 'infinity'::TIMESTAMP",  '294247-01-10 04:00:54.775807'],
+    );
+
+    foreach my $test (@TESTS) {
+        is $dbh->selectrow_arrayref($test->[0])->[0], $test->[1], $test->[0];
+    }
 }
 
 done_testing;

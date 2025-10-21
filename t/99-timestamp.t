@@ -21,11 +21,10 @@ SCOPE: {
     diag "TZ: STD=$std, DST:$dst";
 
     my @TESTS = (
-
-        #["SELECT timezone('America/Denver', TIMESTAMP '2001-02-16 20:38:40')",      '2001-02-17 04:38:40+01'],
-        #["SELECT timezone('America/Denver', TIMESTAMPTZ '2001-02-16 04:38:40')",    '2001-02-15 20:38:40'],
-        #["SELECT timezone('UTC', TIMESTAMP '2001-02-16 20:38:40+00:00')",           '2001-02-16 21:38:40+01'],
-        #["SELECT timezone('UTC', TIMESTAMPTZ '2001-02-16 04:38:40 Europe/Berlin')", '2001-02-16 03:38:40'],
+        ["SELECT timezone('America/Denver', TIMESTAMP '2001-02-16 20:38:40')",      '2001-02-17 04:38:40+01'],
+        ["SELECT timezone('America/Denver', TIMESTAMPTZ '2001-02-16 04:38:40')",    '2001-02-15 20:38:40'],
+        ["SELECT timezone('UTC', TIMESTAMP '2001-02-16 20:38:40+00:00')",           '2001-02-16 21:38:40+01'],
+        ["SELECT timezone('UTC', TIMESTAMPTZ '2001-02-16 04:38:40 Europe/Berlin')", '2001-02-16 03:38:40'],
     );
 
     foreach my $test (@TESTS) {

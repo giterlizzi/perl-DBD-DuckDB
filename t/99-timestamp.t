@@ -55,6 +55,10 @@ SCOPE: {
         ["SELECT '-infinity'::TIMESTAMP", '-290308-12-21 19:59:06.224193'],
         ["SELECT 'epoch'::TIMESTAMP",     '1970-01-01 00:00:00'],
         ["SELECT 'infinity'::TIMESTAMP",  '294247-01-10 04:00:54.775807'],
+
+        ["SELECT TIMESTAMP '1992-03-22 01:02:03' + INTERVAL 5 DAY", '1992-03-27 01:02:03'],
+        ["SELECT TIMESTAMP '1992-03-27' - TIMESTAMP '1992-03-22'",  "5 days"],
+        ["SELECT TIMESTAMP '1992-03-22 01:02:03' - INTERVAL 5 DAY", '1992-03-17 01:02:03'],
     );
 
     foreach my $test (@TESTS) {

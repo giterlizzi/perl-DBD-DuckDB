@@ -1265,12 +1265,14 @@ package    # hide from PAUSE
 
         if ($micros) {
 
-            my $seconds   = int($micros / 1_000_000);
+            my $seconds = abs($micros / 1_000_000);
+            my $sign    = ($micros < 0 ? '-' : '');
+
             my $t_hours   = int($seconds / 3_600);
             my $t_minutes = int(($seconds % 3_600) / 60);
             my $t_seconds = int($seconds % 60);
 
-            return sprintf '%02d:%02d:%02d', $t_hours, $t_minutes, $t_seconds;
+            return sprintf '%s%02d:%02d:%02d', $sign, $t_hours, $t_minutes, $t_seconds;
 
         }
 

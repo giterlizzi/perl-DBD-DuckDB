@@ -10,8 +10,6 @@ use lib 't/lib';
 use DuckDBTest;
 use POSIX;
 
-my $dbh = connect_ok;
-
 SCOPE: {
 
     local $ENV{TZ} = 'Europe/Berlin';
@@ -19,6 +17,8 @@ SCOPE: {
 
     my ($std, $dst) = POSIX::tzname;
     diag "TZ: STD=$std, DST:$dst";
+
+    my $dbh = connect_ok;
 
     my @TESTS = (
         ["SELECT timezone('America/Denver', TIMESTAMP '2001-02-16 20:38:40')",      '2001-02-17 04:38:40+01'],
@@ -41,6 +41,8 @@ SCOPE: {
     my ($std, $dst) = POSIX::tzname;
     diag "TZ: STD=$std, DST:$dst";
 
+    my $dbh = connect_ok;
+
     my @TESTS = (
         ["SELECT TIMESTAMP_NS '1992-09-20 11:30:00.123456789'", '1992-09-20 11:30:00.123456789'],
         ["SELECT TIMESTAMP '1992-09-20 11:30:00.123456789'",    '1992-09-20 11:30:00.123456'],
@@ -48,8 +50,7 @@ SCOPE: {
         ["SELECT TIMESTAMP_S '1992-09-20 11:30:00.123456789'",  '1992-09-20 11:30:00'],
 
         # TODO: This test work fine if TZ is set to UTC in the shell environment (eg. TZ=UTC prove -lv t/*.t)
-        # ["SELECT TIMESTAMPTZ '1992-09-20 11:30:00.123456789'",    '1992-09-20 11:30:00.123456+00'],
-
+        # ["SELECT TIMESTAMPTZ '1992-09-20 11:30:00.123456789'",       '1992-09-20 11:30:00.123456+00'],
         ["SELECT TIMESTAMPTZ '1992-09-20 12:30:00.123456789+01:00'", '1992-09-20 11:30:00.123456+00'],
 
         ["SELECT '-infinity'::TIMESTAMP", '-290308-12-21 19:59:06.224193'],

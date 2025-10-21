@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.14';
+    our $VERSION = '0.14_1';
     $VERSION =~ tr/_//d;
 
     our $drh;
@@ -926,14 +926,15 @@ package    # hide from PAUSE
         return _vector_i32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_INTEGER);
         return _vector_i64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_BIGINT);
         return _vector_i8($vector_data, $row_idx)                           if ($type_id == DUCKDB_TYPE_TINYINT);
+        return _vector_interval($vector_data, $row_idx)                     if ($type_id == DUCKDB_TYPE_INTERVAL);
         return _vector_list($logical_type, $vector, $vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_LIST);
         return _vector_map($logical_type, $vector, $vector_data, $row_idx)  if ($type_id == DUCKDB_TYPE_MAP);
         return _vector_struct($logical_type, $vector, $row_idx)             if ($type_id == DUCKDB_TYPE_STRUCT);
-        return _vector_timestamp($vector_data, $row_idx)                    if ($type_id == DUCKDB_TYPE_TIMESTAMP);
         return _vector_timestamp_ms($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_MS);
         return _vector_timestamp_ns($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_NS);
         return _vector_timestamp_s($vector_data, $row_idx)                  if ($type_id == DUCKDB_TYPE_TIMESTAMP_S);
         return _vector_timestamp_tz($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_TZ);
+        return _vector_timestamp($vector_data, $row_idx)                    if ($type_id == DUCKDB_TYPE_TIMESTAMP);
         return _vector_u16($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_USMALLINT);
         return _vector_u32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_UINTEGER);
         return _vector_u64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_UBIGINT);
@@ -1017,9 +1018,9 @@ package    # hide from PAUSE
 
         my ($vector_data, $row_idx) = @_;
 
-        my $time  = _vector_i64($vector_data, $row_idx);
-        my $micro = int($time % 1_000_000);
-        my $t     = Time::Piece->localtime(int($time / 1_000_000));
+        my $time   = _vector_i64($vector_data, $row_idx);
+        my $micros = int($time % 1_000_000);
+        my $t      = Time::Piece->localtime(int($time / 1_000_000));
 
         my $tz_h    = abs($t->tzoffset) / 3_600;
         my $tz_m    = abs($t->tzoffset) % 3_600 / 60;
@@ -1033,7 +1034,7 @@ package    # hide from PAUSE
         }
 
         my @t = ($t->datetime(T => ' '));
-        push @t, $micro if $micro > 0;
+        push @t, $micros if $micros > 0;
 
         return join '', join('.', @t), $offset;
 
@@ -1249,6 +1250,29 @@ package    # hide from PAUSE
 
         return sprintf '%s-%s-%s-%s-%s', substr($hex, 0, 8), substr($hex, 8, 4), substr($hex, 12, 4),
             substr($hex, 16, 4), substr($hex, 20, 12);
+
+    }
+
+    sub _vector_interval {
+
+        my ($vector_data, $row_idx) = @_;
+
+        # Decode duckdb_interval struct
+        my ($months, $days, $micros) = unpack('l< l< q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
+
+        return sprintf '%d months', $months if $months;
+        return sprintf '%d days',   $days   if $days;
+
+        if ($micros) {
+
+            my $seconds   = int($micros / 1_000_000);
+            my $t_hours   = int($seconds / 3_600);
+            my $t_minutes = int(($seconds % 3_600) / 60);
+            my $t_seconds = int($seconds % 60);
+
+            return sprintf '%02d:%02d:%02d', $t_hours, $t_minutes, $t_seconds;
+
+        }
 
     }
 

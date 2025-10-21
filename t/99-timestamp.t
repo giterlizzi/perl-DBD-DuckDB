@@ -14,7 +14,7 @@ my $dbh = connect_ok;
 
 SCOPE: {
 
-    $ENV{TZ} = 'Europe/Berlin';
+    local $ENV{TZ} = 'Europe/Berlin';
     POSIX::tzset;
 
     my ($std, $dst) = POSIX::tzname;
@@ -35,7 +35,7 @@ SCOPE: {
 
 SCOPE: {
 
-    $ENV{TZ} = 'UTC';
+    local $ENV{TZ} = 'UTC';
     POSIX::tzset;
 
     my ($std, $dst) = POSIX::tzname;

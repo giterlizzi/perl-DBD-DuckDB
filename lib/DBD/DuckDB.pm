@@ -928,7 +928,7 @@ package    # hide from PAUSE
         return _vector_i8($vector_data, $row_idx)                           if ($type_id == DUCKDB_TYPE_TINYINT);
         return _vector_list($logical_type, $vector, $vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_LIST);
         return _vector_map($logical_type, $vector, $vector_data, $row_idx)  if ($type_id == DUCKDB_TYPE_MAP);
-        return _vector_sstruct($logical_type, $vector, $row_idx)            if ($type_id == DUCKDB_TYPE_STRUCT);
+        return _vector_struct($logical_type, $vector, $row_idx)             if ($type_id == DUCKDB_TYPE_STRUCT);
         return _vector_timestamp($vector_data, $row_idx)                    if ($type_id == DUCKDB_TYPE_TIMESTAMP);
         return _vector_timestamp_ms($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_MS);
         return _vector_timestamp_ns($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_NS);

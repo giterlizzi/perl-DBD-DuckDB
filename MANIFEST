@@ -22,6 +22,7 @@ t/99-map.t
 t/99-struct.t
 t/99-timestamp.t
 t/99-union.t
+t/99-uuid.t
 t/kwalitee.t
 t/lib/DuckDBTest.pm
 t/manifest.t

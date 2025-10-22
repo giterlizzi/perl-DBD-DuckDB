@@ -99,7 +99,7 @@ package    # hide from PAUSE
 
                 my $option = $attr->{duckdb_config}->{$name};
 
-                $drh->trace_msg("    <- DuckDB Config: $name = $option\n");
+                $drh->trace_msg("    <- [DuckDB] Config: $name = $option\n");
 
                 if (duckdb_set_config($config, $name, $option)) {
                     return $drh->set_err(1, "duckdb_set_config ($name => $option) failed");
@@ -694,11 +694,11 @@ package    # hide from PAUSE
                 # DuckDB auto commit
             }
             elsif (!$old_value && $value) {
-                $dbh->trace_msg("    <- DuckDB: commit changes\n");
+                $dbh->trace_msg("    <- [DuckDB] Commit changes\n");
                 $dbh->do('COMMIT');
             }
             elsif ($old_value && !$value || !$old_value && !$value && $never_set) {
-                $dbh->trace_msg("    <- DuckDB: start transaction\n");
+                $dbh->trace_msg("    <- [DuckDB] Start transaction\n");
                 $dbh->do('BEGIN TRANSACTION');
             }
 
@@ -907,7 +907,7 @@ package    # hide from PAUSE
 
         my $validity = duckdb_vector_get_validity($vector);
         unless (duckdb_validity_row_is_valid($validity, $row_idx)) {
-            DBI->trace_msg("    -> DuckDB duckdb_validity_row_is_valid => 0\n", 2);
+            DBI->trace_msg("    -> [DuckDB] duckdb_validity_row_is_valid => 0\n", 2);
             return undef;
         }
 
@@ -915,7 +915,7 @@ package    # hide from PAUSE
         my $type_id     = duckdb_get_type_id($logical_type);
         my $type_name   = DBD::DuckDB::Constants->DUCKDB_TYPE($type_id);
 
-        DBI->trace_msg("    -> DuckDB [row_idx=$row_idx, type=$type_name($type_id)]\n", 2);
+        DBI->trace_msg("    -> [DuckDB] Fetch vector value: row_idx=$row_idx, type=$type_name($type_id)\n", 2);
 
         return _vector_array($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_ARRAY);
         return _vector_date($vector_data, $row_idx)                         if ($type_id == DUCKDB_TYPE_DATE);
@@ -930,6 +930,8 @@ package    # hide from PAUSE
         return _vector_list($logical_type, $vector, $vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_LIST);
         return _vector_map($logical_type, $vector, $vector_data, $row_idx)  if ($type_id == DUCKDB_TYPE_MAP);
         return _vector_struct($logical_type, $vector, $row_idx)             if ($type_id == DUCKDB_TYPE_STRUCT);
+        return _vector_time_tz($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_TIME_TZ);
+        return _vector_time($vector_data, $row_idx)                         if ($type_id == DUCKDB_TYPE_TIME);
         return _vector_timestamp_ms($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_MS);
         return _vector_timestamp_ns($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_NS);
         return _vector_timestamp_s($vector_data, $row_idx)                  if ($type_id == DUCKDB_TYPE_TIMESTAMP_S);
@@ -995,11 +997,12 @@ package    # hide from PAUSE
         my ($vector_data, $row_idx) = @_;
 
         # Decode duckdb_date struct
-        my $days  = _vector_i32($vector_data, $row_idx);
-        my $epoch = 0 + 86400 * $days;
+        my $days = _vector_i32($vector_data, $row_idx);
+        my $date = duckdb_from_date($days);
 
-        my $t = Time::Piece->new($epoch);
-        return $t->date;
+        DBI->trace_msg("    -> [DuckDB] DATE type: days=$days\n", 2);
+
+        return sprintf '%04d-%02d-%02d', $date->year, $date->month, $date->day;
 
     }
 
@@ -1007,8 +1010,10 @@ package    # hide from PAUSE
 
         my ($vector_data, $row_idx) = @_;
 
-        my $time = _vector_i64($vector_data, $row_idx);
-        my $t    = Time::Piece->gmtime($time);
+        my $seconds = _vector_i64($vector_data, $row_idx);
+        my $t       = Time::Piece->gmtime($seconds);
+
+        DBI->trace_msg("    -> [DuckDB] TIMESTAMP_S type: seconds=$seconds\n", 2);
 
         return $t->datetime(T => ' ');
 
@@ -1018,9 +1023,12 @@ package    # hide from PAUSE
 
         my ($vector_data, $row_idx) = @_;
 
-        my $time   = _vector_i64($vector_data, $row_idx);
-        my $micros = int($time % 1_000_000);
-        my $t      = Time::Piece->localtime(int($time / 1_000_000));
+        my $micros = _vector_i64($vector_data, $row_idx);
+
+        DBI->trace_msg("    -> [DuckDB] TIMESTAMP_TZ type: micros=$micros\n", 2);
+
+        my $t_micros = int($micros % 1_000_000);
+        my $t        = Time::Piece->localtime(int($micros / 1_000_000));
 
         my $tz_h    = abs($t->tzoffset) / 3_600;
         my $tz_m    = abs($t->tzoffset) % 3_600 / 60;
@@ -1034,7 +1042,7 @@ package    # hide from PAUSE
         }
 
         my @t = ($t->datetime(T => ' '));
-        push @t, $micros if $micros > 0;
+        push @t, $t_micros if $t_micros > 0;
 
         return join '', join('.', @t), $offset;
 
@@ -1044,12 +1052,15 @@ package    # hide from PAUSE
 
         my ($vector_data, $row_idx) = @_;
 
-        my $time   = _vector_i64($vector_data, $row_idx);
-        my $millis = int($time % 1000 * 1000);
-        my $t      = Time::Piece->gmtime($time / 1000);
+        my $millis = _vector_i64($vector_data, $row_idx);
+
+        DBI->trace_msg("    -> [DuckDB] TIMESTAMP_MS type: millis=$millis\n", 2);
+
+        my $t_millis = int($millis % 1000 * 1000);
+        my $t        = Time::Piece->gmtime($millis / 1000);
 
         my @t = ($t->datetime(T => ' '));
-        push @t, substr($millis, 0, 3) if $millis > 0;
+        push @t, substr($t_millis, 0, 3) if $millis > 0;
 
         return join '.', @t;
 
@@ -1059,12 +1070,15 @@ package    # hide from PAUSE
 
         my ($vector_data, $row_idx) = @_;
 
-        my $time  = _vector_i64($vector_data, $row_idx);
-        my $nanos = int($time % 1_000_000_000);
-        my $t     = Time::Piece->gmtime(int($time / 1_000_000_000));
+        my $nanos = _vector_i64($vector_data, $row_idx);
+
+        DBI->trace_msg("    -> [DuckDB] TIMESTAMP_NS type: nanos=$nanos\n", 2);
+
+        my $t_nanos = int($nanos % 1_000_000_000);
+        my $t       = Time::Piece->gmtime(int($nanos / 1_000_000_000));
 
         my @t = ($t->datetime(T => ' '));
-        push @t, $nanos if $nanos > 0;
+        push @t, $t_nanos if $t_nanos > 0;
 
         return join '.', @t;
 
@@ -1072,16 +1086,17 @@ package    # hide from PAUSE
 
     sub _vector_timestamp {
 
-        # Return TIMESTAMP in ISO 8601 format YYYY-MM-DD hh:mm:ss[.zzzzzzzzz][+-TT[:tt]]
-
         my ($vector_data, $row_idx, $type_id) = @_;
 
-        my $time  = _vector_i64($vector_data, $row_idx);
-        my $micro = int($time % 1_000_000);
-        my $t     = Time::Piece->gmtime(int($time / 1_000_000));
+        my $micros = _vector_i64($vector_data, $row_idx);
+
+        DBI->trace_msg("    -> [DuckDB] TIMESTAMP type: micros=$micros\n", 2);
+
+        my $t_micros = int($micros % 1_000_000);
+        my $t        = Time::Piece->gmtime(int($micros / 1_000_000));
 
         my @t = ($t->datetime(T => ' '));
-        push @t, $micro if $micro > 0;
+        push @t, $t_micros if $t_micros > 0;
 
         return join '.', @t;
 
@@ -1242,6 +1257,8 @@ package    # hide from PAUSE
         # Decode duckdb_uhugeint struct
         my ($lower, $upper) = unpack('Q< Q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
 
+        DBI->trace_msg("    -> [DuckDB] UUID type: lower=$lower, upper=$upper\n", 2);
+
         $upper ^= 1 << 63;    # flip
         $upper += 1 << 64 if $upper < 0;
 
@@ -1260,8 +1277,23 @@ package    # hide from PAUSE
         # Decode duckdb_interval struct
         my ($months, $days, $micros) = unpack('l< l< q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
 
-        return sprintf '%d months', $months if $months;
-        return sprintf '%d days',   $days   if $days;
+        DBI->trace_msg("    -> [DuckDB] INTERVAL type: months=$months, days=$days, micros=$micros\n", 2);
+
+        if ($months > 0 || $days > 0) {
+
+            my $t_months = abs($months) >= 12 ? abs($months) - 12 : abs($months);
+            my $t_years  = int(abs($months) / 12);
+            my $t_days   = abs($days);
+
+            my @t = ();
+
+            push @t, sprintf '%d year%s',  $t_years,  ($t_years > 1  ? 's' : '') if $t_years;
+            push @t, sprintf '%d month%s', $t_months, ($t_months > 1 ? 's' : '') if $t_months;
+            push @t, sprintf '%d day%s',   $t_days,   ($t_days > 1   ? 's' : '') if $t_days;
+
+            return join ' ', @t;
+
+        }
 
         if ($micros) {
 
@@ -1271,10 +1303,70 @@ package    # hide from PAUSE
             my $t_hours   = int($seconds / 3_600);
             my $t_minutes = int(($seconds % 3_600) / 60);
             my $t_seconds = int($seconds % 60);
+            my $t_micros  = int($micros % 1_000_000);
 
-            return sprintf '%s%02d:%02d:%02d', $sign, $t_hours, $t_minutes, $t_seconds;
+            my $time = sprintf '%s%02d:%02d:%02d', $sign, $t_hours, $t_minutes, $t_seconds;
+
+            if ($t_micros) {
+                $time .= ".$t_micros";
+            }
+
+            return $time;
 
         }
+
+    }
+
+    sub _vector_time {
+
+        my ($vector_data, $row_idx) = @_;
+
+        # Decode duckdb_time struct
+        my $micros = _vector_i64($vector_data, $row_idx);
+        my $time   = duckdb_from_time($micros);
+
+        DBI->trace_msg("    -> [DuckDB] TIME type: micros=$micros\n", 2);
+
+        my $out = sprintf '%02d:%02d:%02d', $time->hour, $time->min, $time->sec;
+
+        if (my $micros = $time->micros) {
+            $out .= ".$micros";
+        }
+
+        return $out;
+
+    }
+
+    sub _vector_time_tz {
+
+        my ($vector_data, $row_idx) = @_;
+
+        # Decode duckdb_time_tz struct
+        my $bits    = _vector_u64($vector_data, $row_idx);
+        my $time_tz = duckdb_from_time_tz($bits);
+
+        DBI->trace_msg("    -> [DuckDB] TIME_TZ type: bits=$bits\n", 2);
+
+        my $time = sprintf '%02d:%02d:%02d', $time_tz->hour, $time_tz->min, $time_tz->sec;
+
+        if (my $micros = $time_tz->micros) {
+            $time .= ".$micros";
+        }
+
+        my $tz_hour = abs($time_tz->offset) / 3_600;
+        my $tz_min  = abs($time_tz->offset) % 3_600 / 60;
+        my $tz_sign = ($time_tz->offset < 0 ? '-' : '+');
+
+        my $offset = sprintf('%s%02d:%02d', $tz_sign, $tz_hour, $tz_min);
+
+        # Remove ":00" from offset
+        while ($offset =~ /\:00$/) {
+            $offset =~ s/\:00$//;
+        }
+
+        $time .= $offset;
+
+        return $time;
 
     }
 

@@ -1,12 +1,13 @@
 Revision history for Perl extension DBD::DuckDB.
 
 0.?? 2025-10-??
-	- Added support for UUID and INTERVAL types
+	- Added support for TIME, TIME_TZ, UUID and INTERVAL types
 	- Added support for all types of TIMESTAMP variants (S, MS, NS, and TZ)
 	- Added support for DuckDB config on "DBI->connect"
 	- Added support for statement "TYPE" attribute
 	- Added "$dbh->column_info" helper
 	- Added new DBI trace messages
+	- Added new tests
 	- Updated POD documentations
 
 0.14 2025-10-17

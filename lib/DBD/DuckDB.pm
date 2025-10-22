@@ -740,6 +740,7 @@ package    # hide from PAUSE
     use Carp;
     use Config;
     use Time::Piece;
+    use Math::BigInt;
 
     use FFI::Platypus::Buffer qw( scalar_to_buffer buffer_to_scalar );
 
@@ -922,6 +923,7 @@ package    # hide from PAUSE
         return _vector_decimal($logical_type, $vector_data, $row_idx)       if ($type_id == DUCKDB_TYPE_DECIMAL);
         return _vector_f32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_FLOAT);
         return _vector_f64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_DOUBLE);
+        return _vector_hugeint($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_HUGEINT);
         return _vector_i16($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_SMALLINT);
         return _vector_i32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_INTEGER);
         return _vector_i64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_BIGINT);
@@ -942,6 +944,7 @@ package    # hide from PAUSE
         return _vector_u64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_UBIGINT);
         return _vector_u8($vector_data, $row_idx)                           if ($type_id == DUCKDB_TYPE_UTINYINT);
         return _vector_u8($vector_data, $row_idx) ? !!1 : !!0               if ($type_id == DUCKDB_TYPE_BOOLEAN);
+        return _vector_uhugeint($vector_data, $row_idx)                     if ($type_id == DUCKDB_TYPE_UHUGEINT);
         return _vector_union($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_UNION);
         return _vector_uuid($vector_data, $row_idx)                         if ($type_id == DUCKDB_TYPE_UUID);
         return _vector_varchar($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_BLOB);
@@ -969,6 +972,41 @@ package    # hide from PAUSE
     sub _vector_i64 { unpack 'q<', _mem(@_, 8) }
     sub _vector_f32 { unpack 'f<', _mem(@_, 4) }
     sub _vector_f64 { unpack 'd<', _mem(@_, 8) }
+
+    sub _vector_uhugeint {
+
+        my ($vector_data, $row_idx) = @_;
+
+        # Decode duckdb_uhugeint struct
+        my ($lower, $upper) = unpack('Q< Q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
+
+        my $value = Math::BigInt->new($upper);
+        $value->blsft(64);
+        $value->badd($lower);
+
+        return $value->bstr;
+
+    }
+
+    sub _vector_hugeint {
+
+        my ($vector_data, $row_idx) = @_;
+
+        # Decode duckdb_hugeint struct
+        my ($lower, $upper) = unpack('Q< q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
+
+        my $value = Math::BigInt->new($upper);
+        $value->blsft(64);
+        $value->badd($lower);
+
+        if ($upper & (1 << 63)) {
+            my $two128 = Math::BigInt->bone() << 128;
+            $value->bsub($two128);
+        }
+
+        return $value->bstr;
+
+    }
 
     sub _vector_varchar {
 

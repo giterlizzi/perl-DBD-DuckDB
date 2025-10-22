@@ -26,6 +26,7 @@ t/99-enum.t
 t/99-interval.t
 t/99-list.t
 t/99-map.t
+t/99-numeric.t
 t/99-struct.t
 t/99-time.t
 t/99-timestamp.t

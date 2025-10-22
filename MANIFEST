@@ -18,8 +18,14 @@ t/12-metadata.t
 t/13-transaction.t
 t/14-foreign-key-info.t
 t/99-array.t
+t/99-blob.t
+t/99-boolean.t
+t/99-date.t
+t/99-enum.t
+t/99-interval.t
 t/99-map.t
 t/99-struct.t
+t/99-time.t
 t/99-timestamp.t
 t/99-union.t
 t/99-uuid.t

@@ -161,6 +161,7 @@ package    # hide from PAUSE
     use warnings;
     use DBI  qw(:sql_types);
     use base qw(DBD::_::db);
+    use Carp ();
 
     use DBD::DuckDB::FFI qw(:all);
     use DBD::DuckDB::Appender;
@@ -168,7 +169,7 @@ package    # hide from PAUSE
 
     our $imp_data_size = 0;
 
-    sub x_duckdb_version { DBD::DuckDB::FFI::duckdb_library_version() }
+    sub x_duckdb_version { duckdb_library_version() }
 
     sub x_duckdb_appender {
 
@@ -737,7 +738,7 @@ package    # hide from PAUSE
     use DBI  qw(:sql_types);
     use base qw(DBD::_::st);
 
-    use Carp;
+    use Carp();
     use Config;
     use Time::Piece;
     use Math::BigInt;
@@ -1268,22 +1269,25 @@ package    # hide from PAUSE
 
         my ($logical_type, $vector_data, $row_idx) = @_;
 
-        my $width = duckdb_decimal_width($logical_type);
-        my $scale = duckdb_decimal_scale($logical_type);
-        my $type  = duckdb_decimal_internal_type($logical_type);
-        my $value = undef;
+        my $width     = duckdb_decimal_width($logical_type);
+        my $scale     = duckdb_decimal_scale($logical_type);
+        my $type_id   = duckdb_decimal_internal_type($logical_type);
+        my $type_name = DBD::DuckDB::Constants->DUCKDB_TYPE($type_id);
+        my $value     = undef;
 
-        $value = _vector_i32($vector_data, $row_idx) if ($type == DUCKDB_TYPE_INTEGER);
-        $value = _vector_i16($vector_data, $row_idx) if ($type == DUCKDB_TYPE_SMALLINT);
-        $value = _vector_i64($vector_data, $row_idx) if ($type == DUCKDB_TYPE_BIGINT);
+        DBI->trace_msg("    -> [DuckDB] duckdb_decimal_internal_type=$type_name($type_id)\n", 2);
+
+        $value = _vector_i32($vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_INTEGER);
+        $value = _vector_i16($vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_SMALLINT);
+        $value = _vector_i64($vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_BIGINT);
 
         # TODO Add other numeric types
 
-        if ($value) {
+        if (defined $value) {
             return sprintf("%.${scale}f", $value / (10**$scale));
         }
 
-        Carp::carp "Unknown decimal internal type ($type)";
+        Carp::carp "Unknown decimal internal type $type_name($type_id)";
         return undef;
 
     }

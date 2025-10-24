@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.14_1';
+    our $VERSION = '0.15';
     $VERSION =~ tr/_//d;
 
     our $drh;

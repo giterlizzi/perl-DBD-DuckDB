@@ -1,6 +1,6 @@
 Revision history for Perl extension DBD::DuckDB.
 
-0.?? 2025-10-??
+0.15 2025-10-24
 	- Added support for TIME, TIME_TZ, UUID and INTERVAL types
 	- Added support for HUGEINT and UHUGEINT
 	- Added support for all types of TIMESTAMP variants (S, MS, NS, and TZ)

@@ -22,81 +22,92 @@ Carp::croak 'duckdb.h not found' unless -e $options{header};
 
 return usage() if (!$options{list} && !$options{ffi} && !$options{pod});
 
-open my $fh, '<', $options{header} or Carp::croak "$!";
-
-my $is_c_api      = 0;
-my $is_group      = 0;
-my $is_deprecated = 0;
-
-my $group_name = undef;
-my $c_api      = undef;
-
 my @GROUPS = ();
 my %API    = ();
 
+parse_h();
 
-while (my $line = <$fh>) {
+build_ffi() if ($options{ffi});
+build_pod() if ($options{pod});
+list_fn()   if ($options{list});
 
-    chomp $line;
 
-    next unless $line;
+sub parse_h {
 
-    if ($line =~ /\*\*DEPRECATED\*\*/) {
-        $is_deprecated = 1;
-    }
+    open my $fh, '<', $options{header} or Carp::croak "$!";
 
-    if (!$is_group && $line =~ /\/\/===---/) {
-        $is_group = 1;
-        next;
-    }
+    my $is_c_api      = 0;
+    my $is_group      = 0;
+    my $is_deprecated = 0;
 
-    if ($is_group && $line =~ /\/\/\s+/) {
+    my $group_name = undef;
+    my $c_api      = undef;
 
-        $group_name = $line;
-        $group_name =~ s{// }{};
 
-        $API{$group_name} //= [];
-        push @GROUPS, $group_name;
+    while (my $line = <$fh>) {
 
-        next;
+        chomp $line;
 
-    }
+        next unless $line;
 
-    if ($is_group && $line =~ /\/\/===---/) {
-        $is_group = 0;
-        next;
-    }
+        if ($line =~ /\*\*DEPRECATED\*\*/) {
+            $is_deprecated = 1;
+        }
 
-    if ($line =~ /^DUCKDB_C_API/) {
+        if (!$is_group && $line =~ /\/\/===---/) {
+            $is_group = 1;
+            next;
+        }
 
-        $c_api    = $line;
-        $is_c_api = 1;
+        if ($is_group && $line =~ /\/\/\s+/) {
 
-        if ($line =~ /\);/) {
-            push @{$API{$group_name}}, {signature => $c_api, is_deprecated => $is_deprecated};
-            $c_api         = undef;
-            $is_c_api      = 0;
-            $is_deprecated = 0;
+            $group_name = $line;
+            $group_name =~ s{// }{};
+
+            $API{$group_name} //= [];
+            push @GROUPS, $group_name;
+
+            next;
+
+        }
+
+        if ($is_group && $line =~ /\/\/===---/) {
+            $is_group = 0;
+            next;
+        }
+
+        if ($line =~ /^DUCKDB_C_API/) {
+
+            $c_api    = $line;
+            $is_c_api = 1;
+
+            if ($line =~ /\);/) {
+                push @{$API{$group_name}}, {signature => $c_api, is_deprecated => $is_deprecated};
+                $c_api         = undef;
+                $is_c_api      = 0;
+                $is_deprecated = 0;
+                next;
+            }
+
+        }
+
+        if ($line !~ /^DUCKDB_C_API/ && $is_c_api) {
+            $line =~ s/^\s+//;
+            $c_api .= " $line";
+            if ($line =~ /\);/) {
+                push @{$API{$group_name}}, {signature => $c_api, is_deprecated => $is_deprecated};
+                $is_c_api      = 0;
+                $is_deprecated = 0;
+                $c_api         = undef;
+            }
             next;
         }
 
     }
 
-    if ($line !~ /^DUCKDB_C_API/ && $is_c_api) {
-        $line =~ s/^\s+//;
-        $c_api .= " $line";
-        if ($line =~ /\);/) {
-            push @{$API{$group_name}}, {signature => $c_api, is_deprecated => $is_deprecated};
-            $is_c_api      = 0;
-            $is_deprecated = 0;
-            $c_api         = undef;
-        }
-        next;
-    }
+    close $fh;
 
 }
-
-close $fh;
 
 sub usage {
 
@@ -131,7 +142,6 @@ sub extract_signature {
 
 }
 
-
 sub build_pod {
 
     foreach my $group_name (@GROUPS) {
@@ -147,8 +157,6 @@ sub build_pod {
             my %signature = extract_signature($_->{signature});
 
             my $fn = $signature{function};
-
-            die $c_api if $fn =~ /\*/;
 
             say "=item * $fn\n";
 
@@ -228,10 +236,3 @@ sub list_fn {
     }
 
 }
-
-
-build_ffi if ($options{ffi});
-build_pod if ($options{pod});
-list_fn   if ($options{list});
-
-exit 0;

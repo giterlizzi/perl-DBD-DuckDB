@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.15';
+    our $VERSION = '0.15_1';
     $VERSION =~ tr/_//d;
 
     our $drh;
@@ -63,7 +63,8 @@ package    # hide from PAUSE
     use DBI;
     use base qw(DBD::_::dr);
 
-    use DBD::DuckDB::FFI qw(:all);
+    use DBD::DuckDB::Constants qw(:duckdb_states);
+    use DBD::DuckDB::FFI       qw(:all);
 
     our $imp_data_size = 0;
 
@@ -84,8 +85,9 @@ package    # hide from PAUSE
         }
 
         $attr->{duckdb_checkpoint_on_disconnect} //= 1;
-        $attr->{duckdb_config}                   //= {};
-        $attr->{duckdb_dbname}                   //= ':memory:';
+
+        $attr->{duckdb_config} //= {};
+        $attr->{duckdb_dbname} //= ':memory:';
 
         my $dbh = DBI::_new_dbh($drh, {Name => $dsn});
 
@@ -101,7 +103,7 @@ package    # hide from PAUSE
 
                 $drh->trace_msg("    <- [DuckDB] Config: $name = $option\n");
 
-                if (duckdb_set_config($config, $name, $option)) {
+                if (duckdb_set_config($config, $name, $option) == DUCKDB_ERROR) {
                     return $drh->set_err(1, "duckdb_set_config ($name => $option) failed");
                 }
 
@@ -109,13 +111,13 @@ package    # hide from PAUSE
 
         }
 
-        if (duckdb_open_ext($attr->{duckdb_dbname}, \$db, $config, \$out_error)) {
+        if (duckdb_open_ext($attr->{duckdb_dbname}, \$db, $config, \$out_error) == DUCKDB_ERROR) {
             return $dbh->set_err(1, $out_error // 'failed to open database');
         }
 
         duckdb_destroy_config(\$config);
 
-        if (duckdb_connect($db, \$conn)) {
+        if (duckdb_connect($db, \$conn) == DUCKDB_ERROR) {
             return $dbh->set_err(1, "Can't connect to $dsn: duckdb_connect failed");
         }
 
@@ -163,8 +165,9 @@ package    # hide from PAUSE
     use base qw(DBD::_::db);
     use Carp ();
 
-    use DBD::DuckDB::FFI qw(:all);
     use DBD::DuckDB::Appender;
+    use DBD::DuckDB::Constants qw(:duckdb_states);
+    use DBD::DuckDB::FFI       qw(:all);
 
 
     our $imp_data_size = 0;
@@ -337,7 +340,7 @@ package    # hide from PAUSE
         my $db   = delete $dbh->{duckdb_db};
 
         if ($dbh->FETCH('duckdb_checkpoint_on_disconnect') && $dbh->FETCH('AutoCommit')) {
-            if (duckdb_query($conn, 'CHECKPOINT')) {
+            if (duckdb_query($conn, 'CHECKPOINT') == DUCKDB_ERROR) {
                 return $dbh->set_err(1, 'failed to save checkpoint');
             }
         }
@@ -360,7 +363,7 @@ package    # hide from PAUSE
 
         $sth->{duckdb_stmt} = undef;
 
-        if (duckdb_prepare($dbh->{duckdb_conn}, $sql, \$sth->{duckdb_stmt})) {
+        if (duckdb_prepare($dbh->{duckdb_conn}, $sql, \$sth->{duckdb_stmt}) == DUCKDB_ERROR) {
             $dbh->set_err(1, duckdb_prepare_error($sth->{duckdb_stmt}) // 'duckdb_prepare failed');
             return;
         }
@@ -742,6 +745,7 @@ package    # hide from PAUSE
     use Config;
     use Time::Piece;
     use Math::BigInt;
+    use JSON::PP qw(encode_json);
 
     use FFI::Platypus::Buffer qw( scalar_to_buffer buffer_to_scalar );
 
@@ -762,9 +766,10 @@ package    # hide from PAUSE
             return _duckdb_type_to_sql_type($attr->{DUCKDB_TYPE}) if defined $attr->{DUCKDB_TYPE};
         }
 
-        return SQL_INTEGER if defined $value && $value =~ /^-?\d+\z/;
-        return SQL_DOUBLE  if defined $value && $value =~ /^-?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?\z/;
-        return SQL_BOOLEAN if defined $value && $value =~ /^(?:true|false|0|1)\z/i;
+        return SQL_ARRAY   if defined $value && ref($value) =~ /(ARRAY|HASH)/;
+        return SQL_BOOLEAN if defined $value && $value      =~ /^(?:true|false|0|1)\z/i;
+        return SQL_DOUBLE  if defined $value && $value      =~ /^-?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?\z/;
+        return SQL_INTEGER if defined $value && $value      =~ /^-?\d+\z/;
         return SQL_VARCHAR;
 
     }
@@ -773,13 +778,22 @@ package    # hide from PAUSE
 
         my ($type_id) = @_;
 
-        return SQL_BIGINT   if $type_id == DUCKDB_TYPE_BIGINT;
-        return SQL_BLOB     if $type_id == DUCKDB_TYPE_BLOB;
-        return SQL_BOOLEAN  if $type_id == DUCKDB_TYPE_BOOLEAN;
-        return SQL_DOUBLE   if $type_id == DUCKDB_TYPE_DOUBLE;
-        return SQL_INTEGER  if $type_id == DUCKDB_TYPE_INTEGER;
-        return SQL_SMALLINT if $type_id == DUCKDB_TYPE_SMALLINT;
-        return SQL_VARCHAR  if $type_id == DUCKDB_TYPE_VARCHAR;
+        my %MAPPING = (
+            DUCKDB_TYPE_ARRAY()    => SQL_ARRAY,
+            DUCKDB_TYPE_BIGINT()   => SQL_BIGINT,
+            DUCKDB_TYPE_BLOB()     => SQL_BLOB,
+            DUCKDB_TYPE_BOOLEAN()  => SQL_BOOLEAN,
+            DUCKDB_TYPE_DOUBLE()   => SQL_DOUBLE,
+            DUCKDB_TYPE_INTEGER()  => SQL_INTEGER,
+            DUCKDB_TYPE_LIST()     => SQL_ARRAY,
+            DUCKDB_TYPE_SMALLINT() => SQL_SMALLINT,
+            DUCKDB_TYPE_STRUCT()   => SQL_ARRAY,
+            DUCKDB_TYPE_VARCHAR()  => SQL_VARCHAR,
+        );
+
+        if (defined $MAPPING{$type_id}) {
+            return $MAPPING{$type_id};
+        }
 
         return SQL_UNKNOWN_TYPE;
 
@@ -793,23 +807,36 @@ package    # hide from PAUSE
         my $duckdb_stmt = $sth->{duckdb_stmt};
 
         if (!defined $value) {
-            my $rc = duckdb_bind_null($duckdb_stmt, $i);
-            return $rc ? $sth->set_err(1, "duckdb_bind_null failed at $i") : 1;
+            my $state = duckdb_bind_null($duckdb_stmt, $i);
+            return $state ? $sth->set_err(1, "duckdb_bind_null failed at $i") : 1;
         }
 
         if ($sql_type == SQL_INTEGER) {
-            my $rc = duckdb_bind_int64($duckdb_stmt, $i, int($value));
-            return $rc ? $sth->set_err(1, "duckdb_bind_int64 failed at $i") : 1;
+            my $state = duckdb_bind_int64($duckdb_stmt, $i, int($value));
+            return $state ? $sth->set_err(1, "duckdb_bind_int64 failed at $i") : 1;
         }
 
         if ($sql_type == SQL_DOUBLE) {
-            my $rc = duckdb_bind_double($duckdb_stmt, $i, 0.0 + $value);
-            return $rc ? $sth->set_err(1, "duckdb_bind_double failed at $i") : 1;
+            my $state = duckdb_bind_double($duckdb_stmt, $i, 0.0 + $value);
+            return $state ? $sth->set_err(1, "duckdb_bind_double failed at $i") : 1;
         }
 
         if ($sql_type == SQL_BOOLEAN) {
-            my $rc = duckdb_bind_bool($duckdb_stmt, $i, ($value ? 1 : 0));
-            return $rc ? $sth->set_err(1, "duckdb_bind_bool failed at $i") : 1;
+            my $state = duckdb_bind_boolean($duckdb_stmt, $i, ($value ? 1 : 0));
+            return $state ? $sth->set_err(1, "duckdb_bind_boolean failed at $i") : 1;
+        }
+
+        if ($sql_type == SQL_ARRAY) {
+
+            my $array = eval { encode_json($value) };
+
+            if ($@) {
+                return $sth->set_err(1, "failed to convert SQL_ARRAY to JSON");
+            }
+
+            my $state = duckdb_bind_varchar($duckdb_stmt, $i, $array);
+            return $state ? $sth->set_err(1, "duckdb_bind_varchar failed at $i") : 1;
+
         }
 
         if ($sql_type == SQL_BLOB) {
@@ -817,16 +844,16 @@ package    # hide from PAUSE
             utf8::downgrade($value, 1);
 
             my ($pointer, $size) = scalar_to_buffer($value);
-            my $rc = duckdb_bind_blob($duckdb_stmt, $i, $pointer, $size);
 
-            return $rc ? $sth->set_err(1, "duckdb_bind_blob failed at $i") : 1;
+            my $state = duckdb_bind_blob($duckdb_stmt, $i, $pointer, $size);
+            return $state ? $sth->set_err(1, "duckdb_bind_blob failed at $i") : 1;
 
         }
 
         # Fallback
 
-        my $rc = duckdb_bind_varchar($duckdb_stmt, $i, "$value");
-        return $rc ? $sth->set_err(1, "duckdb_bind_varchar failed at $i") : 1;
+        my $state = duckdb_bind_varchar($duckdb_stmt, $i, "$value");
+        return $state ? $sth->set_err(1, "duckdb_bind_varchar failed at $i") : 1;
 
     }
 
@@ -845,7 +872,7 @@ package    # hide from PAUSE
 
         my $res = DBD::DuckDB::FFI::Result->new;
 
-        if (duckdb_execute_prepared($duckdb_stmt, $res)) {
+        if (duckdb_execute_prepared($duckdb_stmt, $res) == DUCKDB_ERROR) {
             return $sth->set_err(1, duckdb_result_error($res) // 'duckdb_execute_prepared failed');
         }
 
@@ -908,6 +935,7 @@ package    # hide from PAUSE
         my ($vector, $row_idx, $logical_type) = @_;
 
         my $validity = duckdb_vector_get_validity($vector);
+
         unless (duckdb_validity_row_is_valid($validity, $row_idx)) {
             DBI->trace_msg("    -> [DuckDB] duckdb_validity_row_is_valid => 0\n", 2);
             return undef;
@@ -981,6 +1009,8 @@ package    # hide from PAUSE
         # Decode duckdb_uhugeint struct
         my ($lower, $upper) = unpack('Q< Q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
 
+        DBI->trace_msg("    -> [DuckDB] UHUGEINT type: lower=$lower,upper=$upper\n", 2);
+
         my $value = Math::BigInt->new($upper);
         $value->blsft(64);
         $value->badd($lower);
@@ -995,6 +1025,8 @@ package    # hide from PAUSE
 
         # Decode duckdb_hugeint struct
         my ($lower, $upper) = unpack('Q< q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
+
+        DBI->trace_msg("    -> [DuckDB] HUGEINT type: lower=$lower,upper=$upper\n", 2);
 
         my $value = Math::BigInt->new($upper);
         $value->blsft(64);
@@ -1269,13 +1301,15 @@ package    # hide from PAUSE
 
         my ($logical_type, $vector_data, $row_idx) = @_;
 
-        my $width     = duckdb_decimal_width($logical_type);
-        my $scale     = duckdb_decimal_scale($logical_type);
+        my $width = duckdb_decimal_width($logical_type);
+        my $scale = duckdb_decimal_scale($logical_type);
+
         my $type_id   = duckdb_decimal_internal_type($logical_type);
         my $type_name = DBD::DuckDB::Constants->DUCKDB_TYPE($type_id);
-        my $value     = undef;
 
-        DBI->trace_msg("    -> [DuckDB] duckdb_decimal_internal_type=$type_name($type_id)\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DECIMAL type $type_name($type_id): width=$width, scale=$scale\n", 2);
+
+        my $value = undef;
 
         $value = _vector_i32($vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_INTEGER);
         $value = _vector_i16($vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_SMALLINT);
@@ -1541,7 +1575,7 @@ L<Latest DBI documentation.|DBI>
 =head1 SETUP
 
 To use L<DBD::DuckDB>, the native DuckDB library must be available when the
-module is loaded.  There are two common ways to satisfy this requirement.
+module is loaded. There are two common ways to satisfy this requirement.
 
 =head2 Manual installation
 
@@ -1549,7 +1583,7 @@ module is loaded.  There are two common ways to satisfy this requirement.
 
 =item * Download the library
 
-    $ wget https://github.com/duckdb/duckdb/releases/download/v$VERSION/libduckdb-linux-amd64.zip
+    $ wget https://github.com/duckdb/duckdb/releases/download/v$DUCKDB_VERSION/libduckdb-linux-amd64.zip
     $ unzip duckdb-linux-amd64.zip
     $ sudo cp libduckdb.so /usr/lib64/          # or another system library directory
 
@@ -1590,6 +1624,10 @@ C<Alien::DuckDB-E<gt>dynamic_lib> to obtain the correct library path.
 
 =back
 
+If both L<Alien::DuckDB> and C<libduckdb.so> are present in the system, L<FFI::CheckLib>
+will always load L<Alien::DuckDB>.
+
+If you want to avoid this, you can export the variable L<DUCKDB_NO_ALIEN=1>.
 
 =head1 THE DBI CLASS
 

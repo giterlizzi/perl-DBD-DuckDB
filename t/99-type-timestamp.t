@@ -8,17 +8,12 @@ use Time::Piece;
 
 use lib 't/lib';
 use DuckDBTest;
-use POSIX;
 
 SCOPE: {
 
-    local $ENV{TZ} = 'Europe/Berlin';
-    POSIX::tzset;
-
-    my ($std, $dst) = POSIX::tzname;
-    diag "TZ: STD=$std, DST:$dst";
-
     my $dbh = connect_ok;
+
+    $dbh->do(q{SET TIMEZONE = 'Europe/Berlin'});
 
     my @TESTS = (
         ["SELECT timezone('America/Denver', TIMESTAMP '2001-02-16 20:38:40')",      '2001-02-17 04:38:40+01'],
@@ -35,13 +30,11 @@ SCOPE: {
 
 SCOPE: {
 
-    local $ENV{TZ} = 'UTC';
-    POSIX::tzset;
-
-    my ($std, $dst) = POSIX::tzname;
-    diag "TZ: STD=$std, DST:$dst";
+    $ENV{TZ} = 'UTC';
 
     my $dbh = connect_ok;
+
+    $dbh->do(q{SET TIMEZONE = 'UTC'});
 
     my @TESTS = (
         ["SELECT TIMESTAMP_NS '1992-09-20 11:30:00.123456789'", '1992-09-20 11:30:00.123456789'],
@@ -49,8 +42,8 @@ SCOPE: {
         ["SELECT TIMESTAMP_MS '1992-09-20 11:30:00.123456789'", '1992-09-20 11:30:00.123'],
         ["SELECT TIMESTAMP_S '1992-09-20 11:30:00.123456789'",  '1992-09-20 11:30:00'],
 
-        # TODO: This test work fine if TZ is set to UTC in the shell environment (eg. TZ=UTC prove -lv t/*.t)
-        # ["SELECT TIMESTAMPTZ '1992-09-20 11:30:00.123456789'",       '1992-09-20 11:30:00.123456+00'],
+        # TODO: TIMSTAMPTZ require TZ env
+        ["SELECT TIMESTAMPTZ '1992-09-20 11:30:00.123456789'",       '1992-09-20 11:30:00.123456+00'],
         ["SELECT TIMESTAMPTZ '1992-09-20 12:30:00.123456789+01:00'", '1992-09-20 11:30:00.123456+00'],
 
         ["SELECT '-infinity'::TIMESTAMP", '-290308-12-21 19:59:06.224193'],

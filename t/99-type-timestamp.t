@@ -11,13 +11,19 @@ use DuckDBTest;
 
 SCOPE: {
 
+    local $ENV{TZ} = 'Europe/Berlin' unless $^O eq 'MSWin32';
+
     my $dbh = connect_ok;
 
-    $dbh->do(q{SET TIMEZONE = 'Europe/Berlin'});
+    ok($dbh->do(q{SET TIMEZONE = 'Europe/Berlin'}), q{SET TIMEZONE = 'Europe/Berlin'});
 
     my @TESTS = (
-        ["SELECT timezone('America/Denver', TIMESTAMP '2001-02-16 20:38:40')",      '2001-02-17 04:38:40+01'],
-        ["SELECT timezone('America/Denver', TIMESTAMPTZ '2001-02-16 04:38:40')",    '2001-02-15 20:38:40'],
+
+        ["SELECT current_setting('TimeZone')", 'Europe/Berlin'],
+
+        ["SELECT timezone('America/Denver', TIMESTAMP '2001-02-16 20:38:40')",   '2001-02-17 04:38:40+01'],
+        ["SELECT timezone('America/Denver', TIMESTAMPTZ '2001-02-16 04:38:40')", '2001-02-15 20:38:40'],
+
         ["SELECT timezone('UTC', TIMESTAMP '2001-02-16 20:38:40+00:00')",           '2001-02-16 21:38:40+01'],
         ["SELECT timezone('UTC', TIMESTAMPTZ '2001-02-16 04:38:40 Europe/Berlin')", '2001-02-16 03:38:40'],
     );
@@ -30,19 +36,21 @@ SCOPE: {
 
 SCOPE: {
 
-    $ENV{TZ} = 'UTC';
+    local $ENV{TZ} = 'UTC';
 
     my $dbh = connect_ok;
-
-    $dbh->do(q{SET TIMEZONE = 'UTC'});
+    ok($dbh->do(q{SET TIMEZONE = 'UTC'}), q{SET TIMEZONE = 'UTC'});
 
     my @TESTS = (
+
+        ["SELECT current_setting('TimeZone')", 'UTC'],
+
         ["SELECT TIMESTAMP_NS '1992-09-20 11:30:00.123456789'", '1992-09-20 11:30:00.123456789'],
         ["SELECT TIMESTAMP '1992-09-20 11:30:00.123456789'",    '1992-09-20 11:30:00.123456'],
         ["SELECT TIMESTAMP_MS '1992-09-20 11:30:00.123456789'", '1992-09-20 11:30:00.123'],
         ["SELECT TIMESTAMP_S '1992-09-20 11:30:00.123456789'",  '1992-09-20 11:30:00'],
 
-        # TODO: TIMSTAMPTZ require TZ env
+        # TODO: require TZ env when no timezone is set in TIMESTAMPTZ
         ["SELECT TIMESTAMPTZ '1992-09-20 11:30:00.123456789'",       '1992-09-20 11:30:00.123456+00'],
         ["SELECT TIMESTAMPTZ '1992-09-20 12:30:00.123456789+01:00'", '1992-09-20 11:30:00.123456+00'],
 

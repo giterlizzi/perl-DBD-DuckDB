@@ -4,8 +4,6 @@ use strict;
 use warnings;
 
 use Test::More;
-use Time::Piece;
-
 use lib 't/lib';
 use DuckDBTest;
 

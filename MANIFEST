@@ -37,4 +37,5 @@ t/lib/DuckDBTest.pm
 t/manifest.t
 t/pod-coverage.t
 t/pod.t
+t/sqllogictest.t
 TODO.md

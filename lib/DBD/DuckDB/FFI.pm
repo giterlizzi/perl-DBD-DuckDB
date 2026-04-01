@@ -595,6 +595,11 @@ state $ffi = FFI::Platypus->new(
     lib => find_lib_or_die(lib => 'duckdb', alien => (USE_ALIEN ? 'Alien::DuckDB' : undef))
 );
 
+sub cast {
+    my  ( $data, $from, $to ) = @_;
+    $ffi->cast( $from, $to, $data );
+}
+
 sub init {
 
     $ffi->type(int      => 'duckdb_result_type');

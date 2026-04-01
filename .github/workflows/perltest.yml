@@ -40,3 +40,63 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cover -test -report Coveralls || true
+
+  duckdb_versions:
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.get_versions.outputs.versions }}
+    steps:
+      - name: Build DuckDB version list
+        id: get_versions
+        shell: bash
+        run: |
+          versions=$(
+            curl -s https://api.github.com/repos/duckdb/duckdb/releases | jq -c '
+              [ .[]
+                | select(.prerelease == false and .draft == false)
+                | .tag_name
+                | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+                | capture("^v(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<patch>[0-9]+)$")
+                | .major |= tonumber
+                | .minor |= tonumber
+                | .patch |= tonumber
+                | select(
+                    (.major > 1)
+                    or (.major == 1 and .minor > 3)
+                    or (.major == 1 and .minor == 3 and .patch >= 0)
+                  )
+              ]
+              | sort_by(.major, .minor, .patch)
+              | group_by([.major, .minor])
+              | map(last | "v\(.major).\(.minor).\(.patch)")
+            '
+          )
+
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
+          echo "$versions"
+
+  duckdb_release:
+    needs: duckdb_versions
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ['ubuntu-latest']
+        perl: [ 'latest' ]
+        duckdb: ${{ fromJSON(needs.duckdb_versions.outputs.versions) }}
+    name: DuckDB ${{ matrix.duckdb }} - Perl ${{ matrix.perl }} on ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up perl
+        uses: shogo82148/actions-setup-perl@v1
+        with:
+          perl-version: ${{ matrix.perl }}
+
+      - run: perl -V
+      - run: cpanm Module::Install
+      - run: cpanm -n --installdeps .
+      - run: wget https://github.com/duckdb/duckdb/releases/download/${{ matrix.duckdb }}/libduckdb-linux-amd64.zip
+      - run: unzip libduckdb-linux-amd64.zip
+      - run: |
+          export DUCKDB_NO_ALIEN=1
+          export LD_LIBRARY_PATH=$(pwd):$LD_LIBRARY_PATH
+          prove -lv t

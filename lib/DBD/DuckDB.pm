@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.15_1';
+    our $VERSION = '0.15_2';
     $VERSION =~ tr/_//d;
 
     our $drh;
@@ -37,6 +37,8 @@ package DBD::DuckDB {
         $class .= "::dr";
 
         my $lib_version = duckdb_library_version();
+
+        DBI->trace_msg("       loaded DuckDB $lib_version library\n", 1);
 
         $drh = DBI::_new_drh(
             $class,
@@ -189,29 +191,29 @@ package    # hide from PAUSE
 
         my ($dbh, $file, $params) = @_;
 
-        # read_json(VARCHAR,
-        #     convert_strings_to_integers : BOOLEAN,
-        #     maximum_sample_files : BIGINT,
-        #     timestamp_format : VARCHAR,
-        #     field_appearance_threshold : DOUBLE,
-        #     timestampformat : VARCHAR,
-        #     map_inference_threshold : BIGINT,
-        #     date_format : VARCHAR,
-        #     filename : ANY,
-        #     union_by_name : BOOLEAN,
-        #     compression : VARCHAR,
-        #     maximum_depth : BIGINT,
-        #     columns : ANY,
-        #     sample_size : BIGINT,
-        #     hive_types : ANY,
-        #     hive_types_autocast : BOOLEAN,
-        #     maximum_object_size : UINTEGER,
-        #     format : VARCHAR,
-        #     ignore_errors : BOOLEAN,
-        #     hive_partitioning : BOOLEAN,
-        #     auto_detect : BOOLEAN,
-        #     records : VARCHAR,
-        #     dateformat : VARCHAR
+        # read_json( VARCHAR,
+        #     convert_strings_to_integers   : BOOLEAN,
+        #     maximum_sample_files          : BIGINT,
+        #     timestamp_format              : VARCHAR,
+        #     field_appearance_threshold    : DOUBLE,
+        #     timestampformat               : VARCHAR,
+        #     map_inference_threshold       : BIGINT,
+        #     date_format                   : VARCHAR,
+        #     filename                      : ANY,
+        #     union_by_name                 : BOOLEAN,
+        #     compression                   : VARCHAR,
+        #     maximum_depth                 : BIGINT,
+        #     columns                       : ANY,
+        #     sample_size                   : BIGINT,
+        #     hive_types                    : ANY,
+        #     hive_types_autocast           : BOOLEAN,
+        #     maximum_object_size           : UINTEGER,
+        #     format                        : VARCHAR,
+        #     ignore_errors                 : BOOLEAN,
+        #     hive_partitioning             : BOOLEAN,
+        #     auto_detect                   : BOOLEAN,
+        #     records                       : VARCHAR,
+        #     dateformat                    : VARCHAR
         # )
 
         my @placeholders = map {"$_ = ?"} sort keys %$params;
@@ -232,52 +234,52 @@ package    # hide from PAUSE
 
         my ($dbh, $file, $params) = @_;
 
-        # read_csv(VARCHAR
-        #     thousands : VARCHAR
-        #     strict_mode : BOOLEAN
-        #     dtypes : ANY
-        #     column_types : ANY
-        #     null_padding : BOOLEAN
-        #     column_names : VARCHAR[]
-        #     buffer_size : UBIGINT
-        #     parallel : BOOLEAN
-        #     force_not_null : VARCHAR[]
-        #     hive_types : ANY
-        #     new_line : VARCHAR
-        #     files_to_sniff : BIGINT
-        #     dateformat : VARCHAR
-        #     delim : VARCHAR
-        #     sep : VARCHAR
-        #     decimal_separator : VARCHAR
-        #     nullstr : ANY
-        #     escape : VARCHAR
-        #     compression : VARCHAR
-        #     encoding : VARCHAR
-        #     hive_types_autocast : BOOLEAN
-        #     all_varchar : BOOLEAN
-        #     columns : ANY
-        #     hive_partitioning : BOOLEAN
-        #     auto_detect : BOOLEAN
-        #     comment : VARCHAR
-        #     quote : VARCHAR
-        #     max_line_size : VARCHAR
-        #     store_rejects : BOOLEAN
-        #     union_by_name : BOOLEAN
-        #     header : BOOLEAN
-        #     types : ANY
-        #     skip : BIGINT
-        #     filename : ANY
-        #     sample_size : BIGINT
-        #     timestampformat : VARCHAR
-        #     normalize_names : BOOLEAN
-        #     ignore_errors : BOOLEAN
-        #     names : VARCHAR[]
-        #     allow_quoted_nulls : BOOLEAN
-        #     maximum_line_size : VARCHAR
-        #     rejects_table : VARCHAR
-        #     auto_type_candidates : ANY
-        #     rejects_scan : VARCHAR
-        #     rejects_limit : BIGINT
+        # read_csv( VARCHAR
+        #     thousands             : VARCHAR
+        #     strict_mode           : BOOLEAN
+        #     dtypes                : ANY
+        #     column_types          : ANY
+        #     null_padding          : BOOLEAN
+        #     column_names          : VARCHAR[]
+        #     buffer_size           : UBIGINT
+        #     parallel              : BOOLEAN
+        #     force_not_null        : VARCHAR[]
+        #     hive_types            : ANY
+        #     new_line              : VARCHAR
+        #     files_to_sniff        : BIGINT
+        #     dateformat            : VARCHAR
+        #     delim                 : VARCHAR
+        #     sep                   : VARCHAR
+        #     decimal_separator     : VARCHAR
+        #     nullstr               : ANY
+        #     escape                : VARCHAR
+        #     compression           : VARCHAR
+        #     encoding              : VARCHAR
+        #     hive_types_autocast   : BOOLEAN
+        #     all_varchar           : BOOLEAN
+        #     columns               : ANY
+        #     hive_partitioning     : BOOLEAN
+        #     auto_detect           : BOOLEAN
+        #     comment               : VARCHAR
+        #     quote                 : VARCHAR
+        #     max_line_size         : VARCHAR
+        #     store_rejects         : BOOLEAN
+        #     union_by_name         : BOOLEAN
+        #     header                : BOOLEAN
+        #     types                 : ANY
+        #     skip                  : BIGINT
+        #     filename              : ANY
+        #     sample_size           : BIGINT
+        #     timestampformat       : VARCHAR
+        #     normalize_names       : BOOLEAN
+        #     ignore_errors         : BOOLEAN
+        #     names                 : VARCHAR[]
+        #     allow_quoted_nulls    : BOOLEAN
+        #     maximum_line_size     : VARCHAR
+        #     rejects_table         : VARCHAR
+        #     auto_type_candidates  : ANY
+        #     rejects_scan          : VARCHAR
+        #     rejects_limit         : BIGINT
         # )
 
         my @placeholders = map {"$_ = ?"} sort keys %$params;
@@ -298,16 +300,27 @@ package    # hide from PAUSE
 
         my ($dbh, $file, $params) = @_;
 
-        # read_xlsx(VARCHAR
-        #     normalize_names : BOOLEAN
-        #     empty_as_varchar : BOOLEAN
-        #     stop_at_empty : BOOLEAN
-        #     sheet : VARCHAR
-        #     range : VARCHAR
-        #     ignore_errors : BOOLEAN
-        #     all_varchar : BOOLEAN
-        #     header : BOOLEAN
+        # read_xlsx( VARCHAR
+        #     normalize_names   : BOOLEAN
+        #     empty_as_varchar  : BOOLEAN
+        #     stop_at_empty     : BOOLEAN
+        #     sheet             : VARCHAR
+        #     range             : VARCHAR
+        #     ignore_errors     : BOOLEAN
+        #     all_varchar       : BOOLEAN
+        #     header            : BOOLEAN
         # )
+
+        my %types = (
+            normalize_names   => 'bool',
+            empty_as_varchar  => 'bool',
+            stop_at_empty     => 'bool',
+            sheet             => 'string',
+            range             => 'string',
+            ignore_errors     => 'bool',
+            all_varchar       => 'bool',
+            header            => 'bool',
+        );
 
         my @placeholders = map {"$_ = ?"} sort keys %$params;
         my @bind         = map { $params->{$_} } sort keys %$params;
@@ -325,7 +338,6 @@ package    # hide from PAUSE
 
     sub get_info {
         my ($dbh, $info_type) = @_;
-
         require DBD::DuckDB::GetInfo;
         my $v = $DBD::DuckDB::GetInfo::info{int($info_type)};
         $v = $v->($dbh) if ref $v eq 'CODE';
@@ -652,9 +664,7 @@ package    # hide from PAUSE
         my $dbh = shift;
 
         if ($dbh->FETCH('AutoCommit')) {
-            if ($dbh->FETCH('Warn')) {
-                warn 'Rollback ineffective while AutoCommit is on';
-            }
+            warn 'Rollback ineffective while AutoCommit is on' if ($dbh->FETCH('Warn'));
             return;
         }
 
@@ -947,39 +957,57 @@ package    # hide from PAUSE
 
         DBI->trace_msg("    -> [DuckDB] Fetch vector value: row_idx=$row_idx, type=$type_name($type_id)\n", 2);
 
-        return _vector_array($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_ARRAY);
-        return _vector_date($vector_data, $row_idx)                         if ($type_id == DUCKDB_TYPE_DATE);
-        return _vector_decimal($logical_type, $vector_data, $row_idx)       if ($type_id == DUCKDB_TYPE_DECIMAL);
-        return _vector_f32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_FLOAT);
-        return _vector_f64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_DOUBLE);
-        return _vector_hugeint($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_HUGEINT);
-        return _vector_i16($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_SMALLINT);
-        return _vector_i32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_INTEGER);
-        return _vector_i64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_BIGINT);
-        return _vector_i8($vector_data, $row_idx)                           if ($type_id == DUCKDB_TYPE_TINYINT);
-        return _vector_interval($vector_data, $row_idx)                     if ($type_id == DUCKDB_TYPE_INTERVAL);
-        return _vector_list($logical_type, $vector, $vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_LIST);
-        return _vector_map($logical_type, $vector, $vector_data, $row_idx)  if ($type_id == DUCKDB_TYPE_MAP);
-        return _vector_struct($logical_type, $vector, $row_idx)             if ($type_id == DUCKDB_TYPE_STRUCT);
-        return _vector_time_tz($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_TIME_TZ);
-        return _vector_time($vector_data, $row_idx)                         if ($type_id == DUCKDB_TYPE_TIME);
-        return _vector_timestamp_ms($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_MS);
-        return _vector_timestamp_ns($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_NS);
-        return _vector_timestamp_s($vector_data, $row_idx)                  if ($type_id == DUCKDB_TYPE_TIMESTAMP_S);
-        return _vector_timestamp_tz($vector_data, $row_idx)                 if ($type_id == DUCKDB_TYPE_TIMESTAMP_TZ);
-        return _vector_timestamp($vector_data, $row_idx)                    if ($type_id == DUCKDB_TYPE_TIMESTAMP);
-        return _vector_u16($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_USMALLINT);
-        return _vector_u32($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_UINTEGER);
-        return _vector_u64($vector_data, $row_idx)                          if ($type_id == DUCKDB_TYPE_UBIGINT);
-        return _vector_u8($vector_data, $row_idx)                           if ($type_id == DUCKDB_TYPE_UTINYINT);
-        return _vector_u8($vector_data, $row_idx) ? !!1 : !!0               if ($type_id == DUCKDB_TYPE_BOOLEAN);
-        return _vector_uhugeint($vector_data, $row_idx)                     if ($type_id == DUCKDB_TYPE_UHUGEINT);
-        return _vector_union($logical_type, $vector, $row_idx)              if ($type_id == DUCKDB_TYPE_UNION);
-        return _vector_uuid($vector_data, $row_idx)                         if ($type_id == DUCKDB_TYPE_UUID);
-        return _vector_varchar($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_BLOB);
-        return _vector_varchar($vector_data, $row_idx)                      if ($type_id == DUCKDB_TYPE_VARCHAR);
+        my %READ_VECTOR_TYPE = (
+            DUCKDB_TYPE_BIGINT()       => sub { _vector_i64(@_) },
+            DUCKDB_TYPE_BIT()          => sub { _vector_bit(@_) },
+            DUCKDB_TYPE_BLOB()         => sub { _vector_varchar(@_) },
+            DUCKDB_TYPE_BOOLEAN()      => sub { _vector_boolean(@_) },
+            DUCKDB_TYPE_DATE()         => sub { _vector_date(@_) },
+            DUCKDB_TYPE_DOUBLE()       => sub { _vector_f64(@_) },
+            DUCKDB_TYPE_FLOAT()        => sub { _vector_f32(@_) },
+            DUCKDB_TYPE_HUGEINT()      => sub { _vector_hugeint(@_) },
+            DUCKDB_TYPE_INTEGER()      => sub { _vector_i32(@_) },
+            DUCKDB_TYPE_INTERVAL()     => sub { _vector_interval(@_) },
+            DUCKDB_TYPE_SMALLINT()     => sub { _vector_i16(@_) },
+            DUCKDB_TYPE_TIME()         => sub { _vector_time(@_) },
+            DUCKDB_TYPE_TIME_TZ()      => sub { _vector_time_tz(@_) },
+            DUCKDB_TYPE_TIMESTAMP()    => sub { _vector_timestamp(@_) },
+            DUCKDB_TYPE_TIMESTAMP_MS() => sub { _vector_timestamp_ms(@_) },
+            DUCKDB_TYPE_TIMESTAMP_NS() => sub { _vector_timestamp_ns(@_) },
+            DUCKDB_TYPE_TIMESTAMP_S()  => sub { _vector_timestamp_s(@_) },
+            DUCKDB_TYPE_TIMESTAMP_TZ() => sub { _vector_timestamp_tz(@_) },
+            DUCKDB_TYPE_TINYINT()      => sub { _vector_i8(@_) },
+            DUCKDB_TYPE_UBIGINT()      => sub { _vector_u64(@_) },
+            DUCKDB_TYPE_UHUGEINT()     => sub { _vector_uhugeint(@_) },
+            DUCKDB_TYPE_UINTEGER()     => sub { _vector_u32(@_) },
+            DUCKDB_TYPE_USMALLINT()    => sub { _vector_u16(@_) },
+            DUCKDB_TYPE_UTINYINT()     => sub { _vector_u8(@_) },
+            DUCKDB_TYPE_UUID()         => sub { _vector_uuid(@_) },
+            DUCKDB_TYPE_VARCHAR()      => sub { _vector_varchar(@_) },
+        );
 
-        Carp::carp "Unknown type $type_name($type_id)";
+        my %READ_COMPLEX_VECTOR_TYPE = (
+            DUCKDB_TYPE_ARRAY()  => sub { _vector_array($logical_type, $vector, $row_idx) },
+            DUCKDB_TYPE_STRUCT() => sub { _vector_struct($logical_type, $vector, $row_idx) },
+            DUCKDB_TYPE_UNION()  => sub { _vector_union($logical_type, $vector, $row_idx) },
+
+            DUCKDB_TYPE_DECIMAL() => sub { _vector_decimal($logical_type, $vector_data, $row_idx) },
+            DUCKDB_TYPE_ENUM()    => sub { _vector_enum($logical_type, $vector_data, $row_idx) },
+
+            DUCKDB_TYPE_LIST() => sub { _vector_list($logical_type, $vector, $vector_data, $row_idx) },
+            DUCKDB_TYPE_MAP()  => sub { _vector_map($logical_type, $vector, $vector_data, $row_idx) },
+        );
+
+        if (my $reader = $READ_VECTOR_TYPE{$type_id}) {
+            return $reader->($vector_data, $row_idx);
+        }
+
+        if (my $reader = $READ_COMPLEX_VECTOR_TYPE{$type_id}) {
+            return $reader->();
+        }
+
+        DBI->trace_msg("    -> [DuckDB] Unsupported vector type $type_name($type_id)\n", 1);
+
         return undef;
 
     }
@@ -1002,6 +1030,57 @@ package    # hide from PAUSE
     sub _vector_f32 { unpack 'f<', _mem(@_, 4) }
     sub _vector_f64 { unpack 'd<', _mem(@_, 8) }
 
+    sub _vector_boolean { _vector_u8(@_) ? !!1 : !!0 }
+
+    sub _vector_bit {
+
+        my ($vector_data, $row_idx) = @_;
+
+        my $raw = _vector_varchar($vector_data, $row_idx);
+        return undef unless defined $raw;
+
+        my $padding = unpack('C', substr($raw, 0, 1));
+
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_BIT: padding=$padding\n", 2);
+
+        $padding = 0 if $padding > 7;
+
+        my $payload = substr($raw, 1);
+
+        my $bits = unpack('B*', $payload);
+        $bits = substr($bits, $padding) if $padding;
+
+        return $bits;
+
+    }
+
+    sub _vector_enum {
+
+        my ($logical_type, $vector_data, $row_idx) = @_;
+
+        my $internal_type = duckdb_enum_internal_type($logical_type);
+        my $internal_name = DBD::DuckDB::Constants->DUCKDB_TYPE($internal_type);
+
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_ENUM - $internal_name($internal_type)\n", 2);
+
+        my %READ_ENUM_IDX = (
+            DUCKDB_TYPE_UTINYINT()  => sub { _vector_u8(@_) },
+            DUCKDB_TYPE_USMALLINT() => sub { _vector_u16(@_) },
+            DUCKDB_TYPE_UINTEGER()  => sub { _vector_u32(@_) },
+            DUCKDB_TYPE_UBIGINT()   => sub { _vector_u64(@_) },
+        );
+
+        if (my $reader = $READ_ENUM_IDX{$internal_type}) {
+            my $enum_idx = $reader->($vector_data, $row_idx);
+            return duckdb_enum_dictionary_value($logical_type, $enum_idx);
+        }
+
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_ENUM - Unsupported internal type $internal_name\n", 1);
+
+        return;
+
+    }
+
     sub _vector_uhugeint {
 
         my ($vector_data, $row_idx) = @_;
@@ -1009,7 +1088,7 @@ package    # hide from PAUSE
         # Decode duckdb_uhugeint struct
         my ($lower, $upper) = unpack('Q< Q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
 
-        DBI->trace_msg("    -> [DuckDB] UHUGEINT type: lower=$lower,upper=$upper\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_UHUGEINT: lower=$lower,upper=$upper\n", 2);
 
         my $value = Math::BigInt->new($upper);
         $value->blsft(64);
@@ -1026,13 +1105,13 @@ package    # hide from PAUSE
         # Decode duckdb_hugeint struct
         my ($lower, $upper) = unpack('Q< q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
 
-        DBI->trace_msg("    -> [DuckDB] HUGEINT type: lower=$lower,upper=$upper\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_HUGEINT: lower=$lower,upper=$upper\n", 2);
 
         my $value = Math::BigInt->new($upper);
         $value->blsft(64);
         $value->badd($lower);
 
-        if ($upper & (1 << 63)) {
+        if ($upper & (1 << 64)) {
             my $two128 = Math::BigInt->bone() << 128;
             $value->bsub($two128);
         }
@@ -1045,18 +1124,22 @@ package    # hide from PAUSE
 
         my ($vector_data, $row_idx) = @_;
 
-        my $PTRSIZE = $Config{ptrsize};
-
-        my $rec = buffer_to_scalar($vector_data + $row_idx * 16, 16);
-        my $len = unpack('L<', substr($rec, 0, 4));
+        my $buffer = buffer_to_scalar($vector_data + $row_idx * 16, 16);
+        my $len    = unpack('L<', substr($buffer, 0, 4));
 
         return undef unless defined $len;
 
+        # If the VARCHAR does not exceed 12 characters, then we inline it.
         if ($len <= 12) {
-            return substr($rec, 4, $len);
+            return substr($buffer, 4, $len);
         }
         else {
-            my $ptr = unpack(($PTRSIZE == 8 ? 'Q<' : 'L<'), substr($rec, 8, $PTRSIZE));
+            # Otherwise, we inline a four-byte prefix for faster string comparisons
+            # and store a pointer to the remaining characters.
+
+            my $PTRSIZE = $Config{ptrsize};
+            my $ptr = unpack(($PTRSIZE == 8 ? 'Q<' : 'L<'), substr($buffer, 8, $PTRSIZE));
+
             return undef unless $ptr;
             return buffer_to_scalar($ptr, $len);
         }
@@ -1071,7 +1154,7 @@ package    # hide from PAUSE
         my $days = _vector_i32($vector_data, $row_idx);
         my $date = duckdb_from_date($days);
 
-        DBI->trace_msg("    -> [DuckDB] DATE type: days=$days\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_DATE: days=$days\n", 2);
 
         return sprintf '%04d-%02d-%02d', $date->year, $date->month, $date->day;
 
@@ -1084,7 +1167,7 @@ package    # hide from PAUSE
         my $seconds = _vector_i64($vector_data, $row_idx);
         my $t       = Time::Piece->gmtime($seconds);
 
-        DBI->trace_msg("    -> [DuckDB] TIMESTAMP_S type: seconds=$seconds\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP_S: seconds=$seconds\n", 2);
 
         return $t->datetime(T => ' ');
 
@@ -1096,7 +1179,7 @@ package    # hide from PAUSE
 
         my $micros = _vector_i64($vector_data, $row_idx);
 
-        DBI->trace_msg("    -> [DuckDB] TIMESTAMP_TZ type: micros=$micros\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP_TZ: micros=$micros\n", 2);
 
         my $t_micros = int($micros % 1_000_000);
         my $t        = Time::Piece->localtime(int($micros / 1_000_000));
@@ -1125,7 +1208,7 @@ package    # hide from PAUSE
 
         my $millis = _vector_i64($vector_data, $row_idx);
 
-        DBI->trace_msg("    -> [DuckDB] TIMESTAMP_MS type: millis=$millis\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP_MS: millis=$millis\n", 2);
 
         my $t_millis = int($millis % 1000 * 1000);
         my $t        = Time::Piece->gmtime($millis / 1000);
@@ -1143,7 +1226,7 @@ package    # hide from PAUSE
 
         my $nanos = _vector_i64($vector_data, $row_idx);
 
-        DBI->trace_msg("    -> [DuckDB] TIMESTAMP_NS type: nanos=$nanos\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP_NS: nanos=$nanos\n", 2);
 
         my $t_nanos = int($nanos % 1_000_000_000);
         my $t       = Time::Piece->gmtime(int($nanos / 1_000_000_000));
@@ -1161,7 +1244,7 @@ package    # hide from PAUSE
 
         my $micros = _vector_i64($vector_data, $row_idx);
 
-        DBI->trace_msg("    -> [DuckDB] TIMESTAMP type: micros=$micros\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP: micros=$micros\n", 2);
 
         my $t_micros = int($micros % 1_000_000);
         my $t        = Time::Piece->gmtime(int($micros / 1_000_000));
@@ -1304,25 +1387,26 @@ package    # hide from PAUSE
         my $width = duckdb_decimal_width($logical_type);
         my $scale = duckdb_decimal_scale($logical_type);
 
-        my $type_id   = duckdb_decimal_internal_type($logical_type);
-        my $type_name = DBD::DuckDB::Constants->DUCKDB_TYPE($type_id);
+        my $int_type = duckdb_decimal_internal_type($logical_type);
+        my $int_name = DBD::DuckDB::Constants->DUCKDB_TYPE($int_type);
 
-        DBI->trace_msg("    -> [DuckDB] DECIMAL type $type_name($type_id): width=$width, scale=$scale\n", 2);
-
-        my $value = undef;
-
-        $value = _vector_i32($vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_INTEGER);
-        $value = _vector_i16($vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_SMALLINT);
-        $value = _vector_i64($vector_data, $row_idx) if ($type_id == DUCKDB_TYPE_BIGINT);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_DECIMAL - $int_name($int_type): width=$width, scale=$scale\n", 2);
 
         # TODO Add other numeric types
+        my %READ_VECTOR_TYPE = (
+            DUCKDB_TYPE_INTEGER()  => sub { _vector_i32(@_) },
+            DUCKDB_TYPE_SMALLINT() => sub { _vector_i16(@_) },
+            DUCKDB_TYPE_BIGINT()   => sub { _vector_i64(@_) },
+            DUCKDB_TYPE_HUGEINT()  => sub { _vector_hugeint(@_) },
+        );
 
-        if (defined $value) {
+        if (my $reader = $READ_VECTOR_TYPE{$int_type}) {
+            my $value = $reader->($vector_data, $row_idx);
             return sprintf("%.${scale}f", $value / (10**$scale));
         }
 
-        Carp::carp "Unknown decimal internal type $type_name($type_id)";
-        return undef;
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_DECIMAL - Unsupported internal type $int_name\n", 1);
+        return;
 
     }
 
@@ -1333,7 +1417,7 @@ package    # hide from PAUSE
         # Decode duckdb_uhugeint struct
         my ($lower, $upper) = unpack('Q< Q<', buffer_to_scalar($vector_data + $row_idx * 16, 16));
 
-        DBI->trace_msg("    -> [DuckDB] UUID type: lower=$lower, upper=$upper\n", 2);
+        DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_UUID: lower=$lower, upper=$upper\n", 2);
 
         $upper ^= 1 << 63;    # flip
         $upper += 1 << 64 if $upper < 0;

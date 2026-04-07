@@ -12,6 +12,9 @@ use Carp;
 use Digest::MD5;
 use JSON::PP qw(decode_json);
 
+use DBD::DuckDB::FFI qw(duckdb_library_version);
+
+
 our @EXPORT = qw(connect_ok run_sqllogictest);
 
 my $parent;
@@ -96,7 +99,7 @@ sub run_sqllogictest {
 
         Test::More::subtest $test_name => sub {
 
-            my (@expected, $mode, $sql, $output, $types, $sort_mode, $label, $hash_mode);
+            my (@expected, $mode, $sql, $output, $types, $sort_mode, $label, $hash_mode, $onlyif);
 
             foreach my $line (split /\n/, $test) {
 
@@ -112,6 +115,9 @@ sub run_sqllogictest {
                 elsif ($line =~ /^----\s*$/) {
                     $output = 1;
                     next;
+                }
+                elsif ($line =~ /^onlyif\s+(.*)$/) {
+                    $onlyif = $1;
                 }
                 else {
                     if (defined $mode) {
@@ -145,6 +151,47 @@ sub run_sqllogictest {
 
             Test::More::diag $label if $label;
             Test::More::diag "SQL: $sql";
+
+            if ($onlyif) {
+
+                my $skip = 0;
+
+                if ($onlyif =~ /([=<>]+)/) {
+
+                    my ($token, $op, $value) = $onlyif =~ /(\w+)([=<>]+)(.*)$/;
+                    Test::More::diag "ONLYIF $token $op $value";
+
+                    for ($token) {
+                        if (/version/) {
+
+                            my $version = duckdb_library_version;
+                            $version =~ s/v//;
+
+                            Test::More::diag "VERSION=$version";
+
+                            if ($op eq '>=') {
+                                $skip = 1 unless (version->parse($version) >= version->parse($value));
+                            }
+                            if ($op eq '<=') {
+                                $skip = 1 unless (version->parse($version) <= version->parse($value));
+                            }
+                            if ($op eq '>') {
+                                $skip = 1 unless (version->parse($version) > version->parse($value));
+                            }
+                            if ($op eq '<') {
+                                $skip = 1 unless (version->parse($version) < version->parse($value));
+                            }
+
+                        }
+                    }
+                }
+
+                if ($skip) {
+                    Test::More::pass "SKIP";
+                    goto END_SQLLOGICTEST;
+                }
+
+            }
 
             if ($mode =~ /^statement:(ok|error)/) {
 
@@ -218,10 +265,12 @@ sub run_sqllogictest {
                 }
             }
 
-        };
+        END_SQLLOGICTEST: {
+                $test_id++;
+                $test_description = undef;
+            }
 
-        $test_id++;
-        $test_description = undef;
+        };
 
     }
 

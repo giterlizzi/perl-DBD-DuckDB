@@ -596,8 +596,8 @@ state $ffi = FFI::Platypus->new(
 );
 
 sub cast {
-    my  ( $data, $from, $to ) = @_;
-    $ffi->cast( $from, $to, $data );
+    my ($data, $from, $to) = @_;
+    $ffi->cast($from, $to, $data);
 }
 
 sub init {

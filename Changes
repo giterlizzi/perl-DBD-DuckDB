@@ -1,6 +1,6 @@
 Revision history for Perl extension DBD::DuckDB.
 
-0.?? 2026-02-??
+0.16 2026-04-07
 	- Exported all DuckDB C API
 	- Improved support for DUCKDB_TYPE_ARRAY and DUCKDB_TYPE_STRUCT in "$sth->bind_param"
 	- Added "DUCKDB_NO_ALIEN" env for disable "Alien::DuckDB"

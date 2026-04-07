@@ -6,7 +6,7 @@ package DBD::DuckDB {
 
     use DBD::DuckDB::FFI qw(duckdb_library_version);
 
-    our $VERSION = '0.15_2';
+    our $VERSION = '0.16';
     $VERSION =~ tr/_//d;
 
     our $drh;
@@ -312,14 +312,14 @@ package    # hide from PAUSE
         # )
 
         my %types = (
-            normalize_names   => 'bool',
-            empty_as_varchar  => 'bool',
-            stop_at_empty     => 'bool',
-            sheet             => 'string',
-            range             => 'string',
-            ignore_errors     => 'bool',
-            all_varchar       => 'bool',
-            header            => 'bool',
+            normalize_names  => 'bool',
+            empty_as_varchar => 'bool',
+            stop_at_empty    => 'bool',
+            sheet            => 'string',
+            range            => 'string',
+            ignore_errors    => 'bool',
+            all_varchar      => 'bool',
+            header           => 'bool',
         );
 
         my @placeholders = map {"$_ = ?"} sort keys %$params;
@@ -1138,7 +1138,7 @@ package    # hide from PAUSE
             # and store a pointer to the remaining characters.
 
             my $PTRSIZE = $Config{ptrsize};
-            my $ptr = unpack(($PTRSIZE == 8 ? 'Q<' : 'L<'), substr($buffer, 8, $PTRSIZE));
+            my $ptr     = unpack(($PTRSIZE == 8 ? 'Q<' : 'L<'), substr($buffer, 8, $PTRSIZE));
 
             return undef unless $ptr;
             return buffer_to_scalar($ptr, $len);

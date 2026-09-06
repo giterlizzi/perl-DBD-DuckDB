@@ -890,8 +890,8 @@ package    # hide from PAUSE
         my $res  = delete $sth->{duckdb_res};
         my $stmt = delete $sth->{duckdb_stmt};
 
-        duckdb_destroy_result($res);
-        duckdb_destroy_prepare($stmt);
+        duckdb_destroy_result(\$res);
+        duckdb_destroy_prepare(\$stmt);
 
         foreach my $lt (@{$sth->{duckdb_col_logical_types}}) {
             duckdb_destroy_logical_type(\$lt);

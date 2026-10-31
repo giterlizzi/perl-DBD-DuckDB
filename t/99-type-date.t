@@ -27,9 +27,14 @@ my @TESTS = (
         [['1992-03-22 00:00:00'], ['1992-03-16 00:00:00']]
     ],
 
-    ["SELECT '-infinity'::DATE", [['-5877641-06-24']]],
+    ["SELECT '-infinity'::DATE", [['-infinity']]],
     ["SELECT 'epoch'::DATE",     [['1970-01-01']]],
-    ["SELECT 'infinity'::DATE",  [['5881580-07-11']]],
+    ["SELECT 'infinity'::DATE",  [['infinity']]],
+
+    ["SELECT DATE '1969-12-31'",      [['1969-12-31']]],
+    ["SELECT DATE '0001-01-01'",      [['0001-01-01']]],
+    ["SELECT DATE '0001-12-31 (BC)'", [['0001-12-31 (BC)']]],
+    ["SELECT DATE '0044-03-15 (BC)'", [['0044-03-15 (BC)']]],
 );
 
 foreach my $test (@TESTS) {
@@ -39,5 +44,14 @@ foreach my $test (@TESTS) {
     is_deeply $got, $expected, $desc;
 }
 
+SCOPE: {
+
+    # Every value as DuckDB writes it, from 30000 BC to 30000 AD
+    my $sql = q{SELECT d, CAST(d AS VARCHAR) FROM (SELECT DATE '1970-01-01' + CAST(i * 7919 AS INTEGER) AS d FROM range(-1400, 1400) t(i))};
+    my @diff = grep { $_->[0] ne $_->[1] } @{$dbh->selectall_arrayref($sql)};
+
+    is_deeply \@diff, [], 'DATE matches CAST(... AS VARCHAR)';
+
+}
 
 done_testing;

@@ -753,7 +753,6 @@ package    # hide from PAUSE
 
     use Carp();
     use Config;
-    use Time::Piece;
     use Math::BigInt;
     use JSON::PP qw(encode_json);
 
@@ -1146,17 +1145,103 @@ package    # hide from PAUSE
 
     }
 
+    # DuckDB stores an infinite DATE as +/- INT32_MAX days and an infinite
+    # TIMESTAMP (every precision) as +/- INT64_MAX units
+    my $DATE_INFINITY      = 2_147_483_647;
+    my $TIMESTAMP_INFINITY = 9_223_372_036_854_775_807;
+
+    # Integer division rounding down, so that a value before the epoch gets the
+    # earlier second and a remainder that is never negative
+    sub _floor_divmod {
+
+        my ($n, $d) = @_;
+
+        use integer;
+
+        my $q = $n / $d;
+        my $r = $n - $q * $d;
+
+        if ($r < 0) {
+            $q -= 1;
+            $r += $d;
+        }
+
+        return ($q, $r);
+
+    }
+
+    # Fraction of a second as DuckDB writes it: zero-padded to the precision
+    # of the type, trailing zeros removed, nothing when it is zero
+    sub _fraction {
+
+        my ($value, $digits) = @_;
+
+        return '' unless $value;
+
+        (my $fraction = sprintf '%0*d', $digits, $value) =~ s/0+$//;
+
+        return ".$fraction";
+
+    }
+
+    sub _date_to_string {
+
+        my ($days) = @_;
+
+        my $date = duckdb_from_date($days);
+        my $year = $date->year;
+
+        # DuckDB has a year 0 (1 BC) and writes years before it with "(BC)"
+        return sprintf '%04d-%02d-%02d', $year, $date->month, $date->day if $year > 0;
+        return sprintf '%04d-%02d-%02d (BC)', 1 - $year, $date->month, $date->day;
+
+    }
+
+    # Offset of the local time zone at $seconds since the epoch, in seconds; an
+    # offset of local mean time carries seconds (Asia/Kolkata +05:53:28)
+    sub _local_offset {
+
+        my ($seconds) = @_;
+
+        my @l = CORE::localtime($seconds);
+        my @g = CORE::gmtime($seconds);
+
+        my $days = ($l[5] == $g[5] ? $l[7] - $g[7] : $l[5] <=> $g[5]);
+
+        return (($days * 24 + $l[2] - $g[2]) * 60 + $l[1] - $g[1]) * 60 + $l[0] - $g[0];
+
+    }
+
+    # $value counts $per_second units since the epoch, $offset (seconds) moves
+    # it to local time
+    sub _timestamp_to_string {
+
+        my ($value, $per_second, $digits, $offset) = @_;
+
+        return 'infinity'  if $value == $TIMESTAMP_INFINITY;
+        return '-infinity' if $value == -$TIMESTAMP_INFINITY;
+
+        my ($seconds, $fraction) = _floor_divmod($value, $per_second);
+        my ($days,    $time)     = _floor_divmod($seconds + ($offset // 0), 86_400);
+
+        return sprintf '%s %02d:%02d:%02d%s', _date_to_string($days), int($time / 3_600), int($time % 3_600 / 60),
+            $time % 60, _fraction($fraction, $digits);
+
+    }
+
     sub _vector_date {
 
         my ($vector_data, $row_idx) = @_;
 
         # Decode duckdb_date struct
         my $days = _vector_i32($vector_data, $row_idx);
-        my $date = duckdb_from_date($days);
 
         DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_DATE: days=$days\n", 2);
 
-        return sprintf '%04d-%02d-%02d', $date->year, $date->month, $date->day;
+        return 'infinity'  if $days == $DATE_INFINITY;
+        return '-infinity' if $days == -$DATE_INFINITY;
+
+        return _date_to_string($days);
 
     }
 
@@ -1165,11 +1250,10 @@ package    # hide from PAUSE
         my ($vector_data, $row_idx) = @_;
 
         my $seconds = _vector_i64($vector_data, $row_idx);
-        my $t       = Time::Piece->gmtime($seconds);
 
         DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP_S: seconds=$seconds\n", 2);
 
-        return $t->datetime(T => ' ');
+        return _timestamp_to_string($seconds, 1, 0);
 
     }
 
@@ -1181,12 +1265,14 @@ package    # hide from PAUSE
 
         DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP_TZ: micros=$micros\n", 2);
 
-        my $t_micros = int($micros % 1_000_000);
-        my $t        = Time::Piece->localtime(int($micros / 1_000_000));
+        return _timestamp_to_string($micros, 1_000_000, 6) if abs($micros) == $TIMESTAMP_INFINITY;
 
-        my $tz_h    = abs($t->tzoffset) / 3_600;
-        my $tz_m    = abs($t->tzoffset) % 3_600 / 60;
-        my $tz_sign = ($t->tzoffset < 0 ? '-' : '+');
+        my ($seconds) = _floor_divmod($micros, 1_000_000);
+        my $tzoffset = _local_offset($seconds);
+
+        my $tz_h    = abs($tzoffset) / 3_600;
+        my $tz_m    = abs($tzoffset) % 3_600 / 60;
+        my $tz_sign = ($tzoffset < 0 ? '-' : '+');
 
         my $offset = sprintf('%s%02d:%02d', $tz_sign, $tz_h, $tz_m);
 
@@ -1195,10 +1281,7 @@ package    # hide from PAUSE
             $offset =~ s/\:00$//;
         }
 
-        my @t = ($t->datetime(T => ' '));
-        push @t, $t_micros if $t_micros > 0;
-
-        return join '', join('.', @t), $offset;
+        return _timestamp_to_string($micros, 1_000_000, 6, $tzoffset) . $offset;
 
     }
 
@@ -1210,13 +1293,7 @@ package    # hide from PAUSE
 
         DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP_MS: millis=$millis\n", 2);
 
-        my $t_millis = int($millis % 1000 * 1000);
-        my $t        = Time::Piece->gmtime($millis / 1000);
-
-        my @t = ($t->datetime(T => ' '));
-        push @t, substr($t_millis, 0, 3) if $millis > 0;
-
-        return join '.', @t;
+        return _timestamp_to_string($millis, 1_000, 3);
 
     }
 
@@ -1228,13 +1305,7 @@ package    # hide from PAUSE
 
         DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP_NS: nanos=$nanos\n", 2);
 
-        my $t_nanos = int($nanos % 1_000_000_000);
-        my $t       = Time::Piece->gmtime(int($nanos / 1_000_000_000));
-
-        my @t = ($t->datetime(T => ' '));
-        push @t, $t_nanos if $t_nanos > 0;
-
-        return join '.', @t;
+        return _timestamp_to_string($nanos, 1_000_000_000, 9);
 
     }
 
@@ -1246,13 +1317,7 @@ package    # hide from PAUSE
 
         DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_TIMESTAMP: micros=$micros\n", 2);
 
-        my $t_micros = int($micros % 1_000_000);
-        my $t        = Time::Piece->gmtime(int($micros / 1_000_000));
-
-        my @t = ($t->datetime(T => ' '));
-        push @t, $t_micros if $t_micros > 0;
-
-        return join '.', @t;
+        return _timestamp_to_string($micros, 1_000_000, 6);
 
     }
 
@@ -1487,13 +1552,7 @@ package    # hide from PAUSE
 
         DBI->trace_msg("    -> [DuckDB] TIME type: micros=$micros\n", 2);
 
-        my $out = sprintf '%02d:%02d:%02d', $time->hour, $time->min, $time->sec;
-
-        if (my $micros = $time->micros) {
-            $out .= ".$micros";
-        }
-
-        return $out;
+        return sprintf '%02d:%02d:%02d%s', $time->hour, $time->min, $time->sec, _fraction($time->micros, 6);
 
     }
 
@@ -1507,17 +1566,15 @@ package    # hide from PAUSE
 
         DBI->trace_msg("    -> [DuckDB] TIME_TZ type: bits=$bits\n", 2);
 
-        my $time = sprintf '%02d:%02d:%02d', $time_tz->hour, $time_tz->min, $time_tz->sec;
-
-        if (my $micros = $time_tz->micros) {
-            $time .= ".$micros";
-        }
+        my $time = sprintf '%02d:%02d:%02d%s', $time_tz->hour, $time_tz->min, $time_tz->sec,
+            _fraction($time_tz->micros, 6);
 
         my $tz_hour = abs($time_tz->offset) / 3_600;
         my $tz_min  = abs($time_tz->offset) % 3_600 / 60;
+        my $tz_sec  = abs($time_tz->offset) % 60;
         my $tz_sign = ($time_tz->offset < 0 ? '-' : '+');
 
-        my $offset = sprintf('%s%02d:%02d', $tz_sign, $tz_hour, $tz_min);
+        my $offset = sprintf('%s%02d:%02d:%02d', $tz_sign, $tz_hour, $tz_min, $tz_sec);
 
         # Remove ":00" from offset
         while ($offset =~ /\:00$/) {

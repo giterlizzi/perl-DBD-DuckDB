@@ -1504,41 +1504,29 @@ package    # hide from PAUSE
 
         DBI->trace_msg("    -> [DuckDB] INTERVAL type: months=$months, days=$days, micros=$micros\n", 2);
 
-        if ($months > 0 || $days > 0) {
+        # Same parts as DuckDB's own text: years and months (both with the sign
+        # of the month count), days, then the time with its own sign
+        my $years = int($months / 12);
+        $months -= $years * 12;
 
-            my $t_months = abs($months) >= 12 ? abs($months) - 12 : abs($months);
-            my $t_years  = int(abs($months) / 12);
-            my $t_days   = abs($days);
+        my @t = ();
 
-            my @t = ();
-
-            push @t, sprintf '%d year%s',  $t_years,  ($t_years > 1  ? 's' : '') if $t_years;
-            push @t, sprintf '%d month%s', $t_months, ($t_months > 1 ? 's' : '') if $t_months;
-            push @t, sprintf '%d day%s',   $t_days,   ($t_days > 1   ? 's' : '') if $t_days;
-
-            return join ' ', @t;
-
+        foreach my $part ([$years, 'year'], [$months, 'month'], [$days, 'day']) {
+            my ($value, $unit) = @$part;
+            push @t, sprintf '%d %s%s', $value, $unit, (abs($value) == 1 ? '' : 's') if $value;
         }
 
         if ($micros) {
 
-            my $seconds = abs($micros / 1_000_000);
-            my $sign    = ($micros < 0 ? '-' : '');
+            my $sign = ($micros < 0 ? '-' : '');
+            my ($seconds, $fraction) = _floor_divmod(abs($micros), 1_000_000);
 
-            my $t_hours   = int($seconds / 3_600);
-            my $t_minutes = int(($seconds % 3_600) / 60);
-            my $t_seconds = int($seconds % 60);
-            my $t_micros  = int($micros % 1_000_000);
-
-            my $time = sprintf '%s%02d:%02d:%02d', $sign, $t_hours, $t_minutes, $t_seconds;
-
-            if ($t_micros) {
-                $time .= ".$t_micros";
-            }
-
-            return $time;
+            push @t, sprintf '%s%02d:%02d:%02d%s', $sign, int($seconds / 3_600), int($seconds % 3_600 / 60),
+                $seconds % 60, _fraction($fraction, 6);
 
         }
+
+        return @t ? join(' ', @t) : '00:00:00';
 
     }
 

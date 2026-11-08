@@ -73,4 +73,44 @@ END_SQL
     is_deeply $got, $expected, 'arithmetic with timestamps, dates and intervals';
 }
 
+SCOPE: {
+
+    my @TESTS = (
+        ["SELECT INTERVAL '-1 year'",                                 '-1 year'],
+        ["SELECT INTERVAL '-17 months'",                              '-1 year -5 months'],
+        ["SELECT INTERVAL '30 months'",                               '2 years 6 months'],
+        ["SELECT INTERVAL '-2 days'",                                 '-2 days'],
+        ["SELECT INTERVAL '1 month -1 day'",                          '1 month -1 day'],
+        ["SELECT INTERVAL '1 year 2 months 3 days 04:05:06.000007'", '1 year 2 months 3 days 04:05:06.000007'],
+        ["SELECT INTERVAL '1 day 01:00:00'",                          '1 day 01:00:00'],
+        ["SELECT INTERVAL '-1 day -01:00:00'",                        '-1 day -01:00:00'],
+        ["SELECT INTERVAL '00:00:00.000005'",                         '00:00:00.000005'],
+        ["SELECT INTERVAL '-00:00:01.5'",                             '-00:00:01.5'],
+        ["SELECT INTERVAL '0 seconds'",                               '00:00:00'],
+    );
+
+    foreach my $test (@TESTS) {
+        is $dbh->selectrow_arrayref($test->[0])->[0], $test->[1], $test->[0];
+    }
+
+}
+
+SCOPE: {
+
+    # Every value as DuckDB writes it: months, days and time, each with
+    # either sign
+    my $sql = <<'END_SQL';
+SELECT v, CAST(v AS VARCHAR) FROM (
+    SELECT to_months(CAST(i % 41 - 20 AS INTEGER)) + to_days(CAST(i % 37 - 18 AS INTEGER))
+         + to_microseconds(CAST(i * 7654321987 - 6000000000000 AS BIGINT)) AS v
+    FROM range(0, 1600) t(i)
+)
+END_SQL
+
+    my @diff = grep { $_->[0] ne $_->[1] } @{$dbh->selectall_arrayref($sql)};
+
+    is_deeply \@diff, [], 'INTERVAL matches CAST(... AS VARCHAR)';
+
+}
+
 done_testing;

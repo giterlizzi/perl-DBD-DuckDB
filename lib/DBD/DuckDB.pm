@@ -1184,16 +1184,52 @@ package    # hide from PAUSE
 
     }
 
+    # Year, month and day of a count of days since 1970-01-01 in the proleptic
+    # Gregorian calendar with a year 0, as duckdb_from_date returns them. Plain
+    # integer arithmetic (H. Hinnant, "chrono-Compatible Low-Level Date
+    # Algorithms", civil_from_days), because some FFI::Platypus builds cannot
+    # attach a function that returns a record by value.
+    sub _civil_from_days {
+
+        my ($days) = @_;
+
+        my ($era, $doe) = _floor_divmod($days + 719_468, 146_097);
+
+        use integer;
+
+        my $yoe = ($doe - $doe / 1_460 + $doe / 36_524 - $doe / 146_096) / 365;
+        my $doy = $doe - (365 * $yoe + $yoe / 4 - $yoe / 100);
+        my $mp  = (5 * $doy + 2) / 153;
+        my $day = $doy - (153 * $mp + 2) / 5 + 1;
+        my $mon = $mp < 10 ? $mp + 3 : $mp - 9;
+
+        return ($yoe + $era * 400 + ($mon <= 2 ? 1 : 0), $mon, $day);
+
+    }
+
     sub _date_to_string {
 
         my ($days) = @_;
 
-        my $date = duckdb_from_date($days);
-        my $year = $date->year;
+        my ($year, $month, $day) = _civil_from_days($days);
 
         # DuckDB has a year 0 (1 BC) and writes years before it with "(BC)"
-        return sprintf '%04d-%02d-%02d', $year, $date->month, $date->day if $year > 0;
-        return sprintf '%04d-%02d-%02d (BC)', 1 - $year, $date->month, $date->day;
+        return sprintf '%04d-%02d-%02d', $year, $month, $day if $year > 0;
+        return sprintf '%04d-%02d-%02d (BC)', 1 - $year, $month, $day;
+
+    }
+
+    # Hour, minute, second and microsecond of a TIME (microseconds since
+    # midnight, 24:00:00 included), as duckdb_from_time returns them
+    sub _time_parts {
+
+        my ($micros) = @_;
+
+        my ($seconds, $fraction) = _floor_divmod($micros, 1_000_000);
+
+        use integer;
+
+        return ($seconds / 3_600, $seconds % 3_600 / 60, $seconds % 60, $fraction);
 
     }
 
@@ -1534,13 +1570,13 @@ package    # hide from PAUSE
 
         my ($vector_data, $row_idx) = @_;
 
-        # Decode duckdb_time struct
+        # Decode duckdb_time (microseconds since midnight)
         my $micros = _vector_i64($vector_data, $row_idx);
-        my $time   = duckdb_from_time($micros);
+        my ($hour, $min, $sec, $fraction) = _time_parts($micros);
 
         DBI->trace_msg("    -> [DuckDB] TIME type: micros=$micros\n", 2);
 
-        return sprintf '%02d:%02d:%02d%s', $time->hour, $time->min, $time->sec, _fraction($time->micros, 6);
+        return sprintf '%02d:%02d:%02d%s', $hour, $min, $sec, _fraction($fraction, 6);
 
     }
 
@@ -1548,19 +1584,21 @@ package    # hide from PAUSE
 
         my ($vector_data, $row_idx) = @_;
 
-        # Decode duckdb_time_tz struct
-        my $bits    = _vector_u64($vector_data, $row_idx);
-        my $time_tz = duckdb_from_time_tz($bits);
+        # Decode duckdb_time_tz: the upper 40 bits hold the microseconds, the
+        # lower 24 bits the offset in seconds, stored as 15:59:59 minus offset
+        # (what duckdb_from_time_tz undoes)
+        my $bits      = _vector_u64($vector_data, $row_idx);
+        my $tz_offset = 57_599 - ($bits & 0xFF_FFFF);
+        my ($hour, $min, $sec, $fraction) = _time_parts($bits >> 24);
 
         DBI->trace_msg("    -> [DuckDB] TIME_TZ type: bits=$bits\n", 2);
 
-        my $time = sprintf '%02d:%02d:%02d%s', $time_tz->hour, $time_tz->min, $time_tz->sec,
-            _fraction($time_tz->micros, 6);
+        my $time = sprintf '%02d:%02d:%02d%s', $hour, $min, $sec, _fraction($fraction, 6);
 
-        my $tz_hour = abs($time_tz->offset) / 3_600;
-        my $tz_min  = abs($time_tz->offset) % 3_600 / 60;
-        my $tz_sec  = abs($time_tz->offset) % 60;
-        my $tz_sign = ($time_tz->offset < 0 ? '-' : '+');
+        my $tz_hour = abs($tz_offset) / 3_600;
+        my $tz_min  = abs($tz_offset) % 3_600 / 60;
+        my $tz_sec  = abs($tz_offset) % 60;
+        my $tz_sign = ($tz_offset < 0 ? '-' : '+');
 
         my $offset = sprintf('%s%02d:%02d:%02d', $tz_sign, $tz_hour, $tz_min, $tz_sec);
 

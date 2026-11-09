@@ -1107,14 +1107,11 @@ package    # hide from PAUSE
 
         DBI->trace_msg("    -> [DuckDB] DUCKDB_TYPE_HUGEINT: lower=$lower,upper=$upper\n", 2);
 
+        # $upper is unpacked signed (q<), so upper * 2**64 + lower already
+        # carries the sign of the 128-bit value.
         my $value = Math::BigInt->new($upper);
         $value->blsft(64);
         $value->badd($lower);
-
-        if ($upper & (1 << 64)) {
-            my $two128 = Math::BigInt->bone() << 128;
-            $value->bsub($two128);
-        }
 
         return $value->bstr;
 
